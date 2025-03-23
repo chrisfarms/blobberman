@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# How we structure our code
+
+./frontend - this is a typescript and react three fibre project managed with pnpm and built with vite
+./backend - this is a go (golang) project that contains the code for the input relay server
+
