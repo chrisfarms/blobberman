@@ -110,3 +110,50 @@ export function randomChance(probability: number): boolean {
   }
   return globalRandom.randomChance(probability);
 }
+
+/**
+ * A simple deterministic hash function for generating consistent random values
+ * based on position. This is useful for dev mode indicators to show which
+ * breakable walls will spawn power-ups when broken.
+ *
+ * @param x X coordinate
+ * @param y Y coordinate
+ * @returns A value between 0-1 that can be used like a random number
+ */
+export function deterministicRandomFromPosition(x: number, y: number): number {
+  // Simple hash function
+  const hash = ((x * 1987) + (y * 27689)) % 10000;
+  return hash / 10000;
+}
+
+/**
+ * Deterministically check if a power-up should spawn at a given position
+ * with a specific probability.
+ *
+ * @param probability Probability of returning true (0-1)
+ * @param x X coordinate
+ * @param y Y coordinate
+ * @returns true if a power-up should spawn, false otherwise
+ */
+export function willSpawnPowerUpAtPosition(probability: number, x: number, y: number): boolean {
+  return deterministicRandomFromPosition(x, y) < probability;
+}
+
+/**
+ * Deterministically get a power-up type for a given position
+ *
+ * @param options Array of options to choose from
+ * @param x X coordinate
+ * @param y Y coordinate
+ * @returns One of the provided options
+ */
+export function getPowerUpTypeAtPosition<T>(options: T[], x: number, y: number): T {
+  // Use a simple hash that produces more varied results across grid positions
+  // Add prime numbers to shift the values for different positions
+  const hash = ((x * 1987) + (y * 27689) + (x * y * 31)) % options.length;
+
+  // Use abs to ensure non-negative, and ensure we get a valid index
+  const index = Math.abs(hash) % options.length;
+
+  return options[index];
+}

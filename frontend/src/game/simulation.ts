@@ -1,8 +1,15 @@
 import { GameTick, PlayerInput, Direction } from '@/types/shared';
-import { initializeRandom, random, randomChance, randomInt } from '@/utils/random';
+import { initializeRandom, random, randomChance, randomInt, willSpawnPowerUpAtPosition, getPowerUpTypeAtPosition } from '@/utils/random';
 
 // Grid cell contents
 export type CellContent = 'empty' | 'wall' | 'breakableWall';
+
+// Power-up types
+export enum PowerUpType {
+  ExtraBomb = 'extraBomb',         // Increases max bombs
+  LongerSplat = 'longerSplat',     // Increases explosion range
+  ShorterFuse = 'shorterFuse'      // Debuff - reduces bomb timer
+}
 
 // Grid cell state
 export interface GridCell {
@@ -17,6 +24,15 @@ export interface Bomb {
   y: number;
   placedAt: number; // Tick when the bomb was placed
   exploded: boolean;
+  fuseMultiplier: number; // Multiplier for fuse time (affected by ShorterFuse power-up)
+}
+
+// Power-up entity
+export interface PowerUp {
+  type: PowerUpType;
+  x: number;
+  y: number;
+  spawnedAt: number; // Tick when the power-up spawned
 }
 
 // Explosion entity (for tracking active explosions)
@@ -33,6 +49,7 @@ export interface GameState {
   grid: GridCell[][];
   bombs: Bomb[];
   explosions: Explosion[];
+  powerUps: PowerUp[]; // Active power-ups on the map
   tick: number;
   maxTicks: number; // Maximum number of ticks in the game session
   tickInterval: number; // Milliseconds between ticks
@@ -52,6 +69,8 @@ export interface PlayerState {
   bombsPlaced: number; // How many bombs placed by this player are currently active
   maxBombs: number; // Maximum number of bombs a player can place simultaneously
   explosionSize: number; // How far explosions travel
+  fuseMultiplier: number; // Multiplier for bomb fuse time (1.0 is normal, lower is faster)
+  powerUps: PowerUpType[]; // Active power-ups this player has
 }
 
 const PLAYER_COLORS = [
@@ -69,6 +88,12 @@ const GRID_SIZE = 20; // 20x20 grid
 const BOMB_TIMER = 60; // 3 seconds at 20 ticks per second
 const EXPLOSION_DURATION = 20; // 1 second at 20 ticks per second
 const DEFAULT_GAME_SEED = 1234567890; // Default seed to use if no players
+
+// Power-up constants
+const POWERUP_SPAWN_CHANCE = 0.4; // 40% chance to spawn a power-up when a breakable wall is destroyed
+const EXTRA_BOMB_MAX = 5; // Maximum number of bombs a player can have
+const LONGER_SPLAT_MAX = 6; // Maximum explosion size
+const SHORTER_FUSE_MIN = 0.5; // Minimum fuse time multiplier (50% of normal)
 
 // Create a grid with walls and breakable walls
 function createInitialGrid(size: number): GridCell[][] {
@@ -145,6 +170,7 @@ export function createInitialGameState(): GameState {
     grid: [], // We'll initialize the grid after we have a proper seed
     bombs: [],
     explosions: [],
+    powerUps: [],
     tick: 0,
     maxTicks: 0, // Maximum number of ticks in the game session
     tickInterval: 0, // Milliseconds between ticks
@@ -195,7 +221,10 @@ function processExplosions(state: GameState): void {
   const remainingBombs: Bomb[] = [];
 
   for (const bomb of bombs) {
-    if (tick - bomb.placedAt >= BOMB_TIMER && !bomb.exploded) {
+    // Apply fuse multiplier to the bomb timer
+    const adjustedBombTimer = Math.floor(BOMB_TIMER * bomb.fuseMultiplier);
+
+    if (tick - bomb.placedAt >= adjustedBombTimer && !bomb.exploded) {
       // Bomb should explode
       bomb.exploded = true;
 
@@ -234,9 +263,15 @@ function processExplosions(state: GameState): void {
             continue;
           }
 
-          // If it's a breakable wall, mark it for destruction
+          // If it's a breakable wall, mark it for destruction and possibly spawn a power-up
           if (grid[cellY][cellX].content === 'breakableWall') {
             grid[cellY][cellX].content = 'empty';
+
+            // Check if a power-up should spawn
+            if (shouldSpawnPowerUp(state, cellX, cellY)) {
+              spawnPowerUp(state, cellX, cellY);
+            }
+
             hit = true;
           }
 
@@ -278,6 +313,10 @@ function processExplosions(state: GameState): void {
     if (tick - explosion.startedAt < EXPLOSION_DURATION) {
       // Paint cells affected by the explosion
       paintExplosionCells(state, explosion);
+
+      // Check if any power-ups are hit by the explosion
+      checkPowerUpHit(state, explosion);
+
       remainingExplosions.push(explosion);
     }
   }
@@ -400,6 +439,15 @@ function resetPlayerPaintedAreas(state: GameState, playerId: string): void {
 
   // Reset painted count
   paintedCounts.set(playerId, 0);
+
+  // Reset player's power-ups to default values
+  const player = state.players.get(playerId);
+  if (player) {
+    player.maxBombs = 1;
+    player.explosionSize = 3;
+    player.fuseMultiplier = 1.0;
+    player.powerUps = []; // Clear all power-ups
+  }
 }
 
 export function processGameTick(currentState: GameState, tick: GameTick): GameState {
@@ -411,6 +459,7 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
       : [], // Otherwise, start with empty grid
     bombs: [...currentState.bombs],
     explosions: [...currentState.explosions],
+    powerUps: [...currentState.powerUps],
     tick: tick.tick,
     maxTicks: currentState.maxTicks,
     tickInterval: currentState.tickInterval,
@@ -429,11 +478,45 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
     newState.grid = createInitialGrid(GRID_SIZE);
   }
 
-  // Process explosions first
-  processExplosions(newState);
+  // Check if the game is over due to reaching max ticks
+  if (newState.maxTicks > 0 && newState.tick >= newState.maxTicks && !newState.gameOver) {
+    // Find the winner (player with the most painted tiles)
+    let maxPaintedCount = 0;
+    let winner: string | null = null;
 
-  // Check if any players are hit by explosions
+    for (const [playerId, count] of newState.paintedCounts.entries()) {
+      if (count > maxPaintedCount) {
+        maxPaintedCount = count;
+        winner = playerId;
+      } else if (count === maxPaintedCount && count > 0) {
+        // If there's a tie, set winner to null
+        winner = null;
+      }
+    }
+
+    console.log(`Game over! Winner: ${winner || 'Tie'}`);
+    newState.gameOver = true;
+    newState.winner = winner;
+  }
+
+  // If the game is over, only process existing bombs and explosions but don't allow new inputs
+  if (newState.gameOver) {
+    // Process explosions (only for existing bombs, don't allow new ones)
+    processExplosions(newState);
+
+    // Check if any players are hit by explosions
+    checkPlayerHit(newState);
+
+    // Check if any players collect power-ups
+    checkPowerUpCollection(newState);
+
+    return newState;
+  }
+
+  // Normal gameplay - process bombs, explosions, player hits, and inputs
+  processExplosions(newState);
   checkPlayerHit(newState);
+  checkPowerUpCollection(newState);
 
   // Process each input
   for (const input of tick.inputs) {
@@ -467,7 +550,9 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
         lastDirection: null,
         bombsPlaced: 0,
         maxBombs: 1,
-        explosionSize: 3
+        explosionSize: 3,
+        fuseMultiplier: 1.0,
+        powerUps: []
       });
 
       // Initialize painted count
@@ -535,7 +620,8 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
             x: cellCenterX,
             y: cellCenterY,
             placedAt: newState.tick,
-            exploded: false
+            exploded: false,
+            fuseMultiplier: player.fuseMultiplier
           });
 
           // Increment player's active bomb count
@@ -546,4 +632,141 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
   }
 
   return newState;
+}
+
+// Check if a power-up should spawn when a breakable wall is destroyed
+function shouldSpawnPowerUp(state: GameState, cellX: number, cellY: number): boolean {
+  return willSpawnPowerUpAtPosition(POWERUP_SPAWN_CHANCE, cellX, cellY);
+}
+
+// Spawn a power-up at the given cell coordinates
+function spawnPowerUp(state: GameState, cellX: number, cellY: number): void {
+  // Convert cell coordinates to world coordinates
+  const x = cellX - state.gridSize / 2 + 0.5;
+  const y = cellY - state.gridSize / 2 + 0.5;
+
+  // Deterministically choose a power-up type based on position
+  const powerUpTypes = [
+    PowerUpType.ShorterFuse,
+    PowerUpType.ExtraBomb,
+    PowerUpType.LongerSplat,
+  ];
+
+  const powerUpType = getPowerUpTypeAtPosition(powerUpTypes, cellX, cellY);
+
+  // Create the power-up
+  state.powerUps.push({
+    type: powerUpType,
+    x,
+    y,
+    spawnedAt: state.tick
+  });
+}
+
+// Check if any power-ups are hit by an explosion
+function checkPowerUpHit(state: GameState, explosion: Explosion): void {
+  const remainingPowerUps: PowerUp[] = [];
+  const currentTick = state.tick;
+  const POWERUP_IMMUNITY_DURATION = 20; // Immunity period in ticks after spawning, must be longer than the explosion duration
+
+  for (const powerUp of state.powerUps) {
+    // Skip power-ups that were recently spawned
+    // This ensures power-ups revealed by an explosion aren't immediately destroyed by it
+    if (currentTick - powerUp.spawnedAt < POWERUP_IMMUNITY_DURATION) {
+      remainingPowerUps.push(powerUp);
+      continue;
+    }
+
+    // Check if power-up is in the center of the explosion
+    const powerUpCellX = Math.floor(powerUp.x + state.gridSize / 2);
+    const powerUpCellY = Math.floor(powerUp.y + state.gridSize / 2);
+    const expCellX = Math.floor(explosion.x + state.gridSize / 2);
+    const expCellY = Math.floor(explosion.y + state.gridSize / 2);
+
+    let hit = false;
+
+    // Check if power-up is in the center of the explosion
+    if (powerUpCellX === expCellX && powerUpCellY === expCellY) {
+      hit = true;
+    }
+
+    // Check if power-up is in any of the explosion arms
+    if (!hit) {
+      for (const arm of explosion.arms) {
+        const armCellX = Math.floor(arm.x + state.gridSize / 2);
+        const armCellY = Math.floor(arm.y + state.gridSize / 2);
+
+        if (powerUpCellX === armCellX && powerUpCellY === armCellY) {
+          hit = true;
+          break;
+        }
+      }
+    }
+
+    // If not hit, keep the power-up
+    if (!hit) {
+      remainingPowerUps.push(powerUp);
+    }
+  }
+
+  // Update power-ups list
+  state.powerUps = remainingPowerUps;
+}
+
+// Check if players collect any power-ups
+function checkPowerUpCollection(state: GameState): void {
+  const { players, powerUps } = state;
+  const remainingPowerUps: PowerUp[] = [];
+
+  for (const powerUp of powerUps) {
+    const powerUpCellX = Math.floor(powerUp.x + state.gridSize / 2);
+    const powerUpCellY = Math.floor(powerUp.y + state.gridSize / 2);
+
+    let collected = false;
+
+    // Check if any player is on this power-up
+    for (const [playerId, player] of players.entries()) {
+      const playerCellX = Math.floor(player.x + state.gridSize / 2);
+      const playerCellY = Math.floor(player.y + state.gridSize / 2);
+
+      if (playerCellX === powerUpCellX && playerCellY === powerUpCellY) {
+        // Player collected the power-up
+        applyPowerUp(state, player, powerUp.type);
+        collected = true;
+        break;
+      }
+    }
+
+    // If not collected, keep the power-up
+    if (!collected) {
+      remainingPowerUps.push(powerUp);
+    }
+  }
+
+  // Update power-ups list
+  state.powerUps = remainingPowerUps;
+}
+
+// Apply a power-up effect to a player
+function applyPowerUp(state: GameState, player: PlayerState, powerUpType: PowerUpType): void {
+  // Add the power-up to the player's collection
+  player.powerUps.push(powerUpType);
+
+  // Apply the effect
+  switch (powerUpType) {
+    case PowerUpType.ExtraBomb:
+      // Increase max bombs
+      player.maxBombs = Math.min(player.maxBombs + 1, EXTRA_BOMB_MAX);
+      break;
+
+    case PowerUpType.LongerSplat:
+      // Increase explosion size
+      player.explosionSize = Math.min(player.explosionSize + 1, LONGER_SPLAT_MAX);
+      break;
+
+    case PowerUpType.ShorterFuse:
+      // Reduce fuse time (this is a debuff)
+      player.fuseMultiplier = Math.max(player.fuseMultiplier * 0.8, SHORTER_FUSE_MIN);
+      break;
+  }
 }

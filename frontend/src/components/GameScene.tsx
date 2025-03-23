@@ -1,6 +1,9 @@
 import { useRef } from 'react';
 import { GridHelper } from 'three';
-import { GameState } from '@/game/simulation';
+import { GameState, PowerUpType } from '@/game/simulation';
+import { Html } from '@react-three/drei';
+import { ENV } from '@/utils/env';
+import { willSpawnPowerUpAtPosition, getPowerUpTypeAtPosition } from '@/utils/random';
 
 interface GameSceneProps {
   gameState: GameState;
@@ -10,6 +13,16 @@ interface GameSceneProps {
 const WALL_COLOR = '#555555';
 const BREAKABLE_WALL_COLOR = '#8a6d3b';
 const FLOOR_COLOR = '#aaaaaa';
+
+// Colors for different power-up types
+const POWER_UP_COLORS = {
+  [PowerUpType.ExtraBomb]: '#ff5500',    // Orange-red
+  [PowerUpType.LongerSplat]: '#00aaff',  // Light blue
+  [PowerUpType.ShorterFuse]: '#ffaa00'   // Amber
+};
+
+// Constants for power-up spawning (matching those in simulation.ts)
+const POWERUP_SPAWN_CHANCE = 0.4; // 40% chance to spawn a power-up
 
 const GameScene = ({ gameState }: GameSceneProps) => {
   const gridRef = useRef<GridHelper>(null);
@@ -48,6 +61,22 @@ const GameScene = ({ gameState }: GameSceneProps) => {
             }
           }
 
+          // For dev mode: Deterministically predict if this breakable wall would spawn a power-up
+          // This should use the same logic as in spawnPowerUp function in simulation.ts
+          const wouldSpawnPowerUp = cell.content === 'breakableWall' &&
+            willSpawnPowerUpAtPosition(POWERUP_SPAWN_CHANCE, x, y);
+
+          // Choose a power-up type deterministically (matching the logic in spawnPowerUp)
+          let predictedPowerUpType = null;
+          if (wouldSpawnPowerUp) {
+            const powerUpTypes = [
+              PowerUpType.ExtraBomb,
+              PowerUpType.LongerSplat,
+              PowerUpType.ShorterFuse
+            ];
+            predictedPowerUpType = getPowerUpTypeAtPosition(powerUpTypes, x, y);
+          }
+
           return (
             <mesh
               key={`cell-${x}-${y}`}
@@ -57,6 +86,26 @@ const GameScene = ({ gameState }: GameSceneProps) => {
             >
               <boxGeometry args={[0.95, cellHeight, 0.95]} />
               <meshStandardMaterial color={cellColor} />
+
+              {/* Dev mode power-up indicator */}
+              {ENV.DEV_MODE && wouldSpawnPowerUp && predictedPowerUpType && (
+                <Html position={[0, cellHeight/2 + 0.5, 0]} center zIndexRange={[1, 10]}>
+                  <div style={{
+                    background: POWER_UP_COLORS[predictedPowerUpType],
+                    color: 'white',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontSize: '10px',
+                    fontWeight: 'bold',
+                    boxShadow: '0 0 3px rgba(0,0,0,0.5)',
+                    opacity: '0.8',
+                    pointerEvents: 'none'
+                  }}>
+                    {predictedPowerUpType === PowerUpType.ExtraBomb ? '💣' :
+                     predictedPowerUpType === PowerUpType.LongerSplat ? '🎯' : '⏱️'}
+                  </div>
+                </Html>
+              )}
             </mesh>
           );
         })
@@ -118,6 +167,46 @@ const GameScene = ({ gameState }: GameSceneProps) => {
                 />
               </mesh>
             ))}
+          </group>
+        );
+      })}
+
+      {/* Render power-ups */}
+      {gameState.powerUps.map((powerUp, index) => {
+        const powerUpColor = POWER_UP_COLORS[powerUp.type] || '#ffffff';
+
+        // Animate power-up by making it hover and rotate
+        const hoverHeight = 0.3 + Math.sin(gameState.tick * 0.1) * 0.1;
+        const rotationY = gameState.tick * 0.05;
+
+        return (
+          <group
+            key={`powerup-${index}`}
+            position={[powerUp.x, hoverHeight, powerUp.y]}
+            rotation={[0, rotationY, 0]}
+          >
+            {/* Base shape */}
+            <mesh castShadow>
+              {powerUp.type === PowerUpType.ExtraBomb ? (
+                <sphereGeometry args={[0.25, 16, 16]} />
+              ) : powerUp.type === PowerUpType.LongerSplat ? (
+                <cylinderGeometry args={[0.15, 0.25, 0.3, 16]} />
+              ) : (
+                <boxGeometry args={[0.3, 0.3, 0.3]} />
+              )}
+              <meshStandardMaterial
+                color={powerUpColor}
+                emissive={powerUpColor}
+                emissiveIntensity={0.5}
+              />
+            </mesh>
+
+            {/* Glowing effect */}
+            <pointLight
+              color={powerUpColor}
+              distance={2}
+              intensity={0.5}
+            />
           </group>
         );
       })}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { GameState } from '@/game/simulation';
+import { GameState, PowerUpType } from '@/game/simulation';
 import styles from './HUD.module.css';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
@@ -47,6 +47,34 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
     const minutes = Math.floor(remainingMs / 60000);
     const seconds = Math.floor((remainingMs % 60000) / 1000);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Function to get human-readable power-up name
+  const getPowerUpName = (type: PowerUpType): string => {
+    switch (type) {
+      case PowerUpType.ExtraBomb:
+        return 'Extra Bomb';
+      case PowerUpType.LongerSplat:
+        return 'Longer Splat';
+      case PowerUpType.ShorterFuse:
+        return 'Shorter Fuse';
+      default:
+        return 'Unknown';
+    }
+  };
+
+  // Function to get power-up icon (emoji)
+  const getPowerUpIcon = (type: PowerUpType): string => {
+    switch (type) {
+      case PowerUpType.ExtraBomb:
+        return '💣';
+      case PowerUpType.LongerSplat:
+        return '🎯';
+      case PowerUpType.ShorterFuse:
+        return '⏱️';
+      default:
+        return '❓';
+    }
   };
 
   return (
@@ -109,8 +137,27 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
                   <span>Explosion Size:</span>
                   <span>{currentPlayer.explosionSize}</span>
                 </div>
+                <div className={styles.detailRow}>
+                  <span>Fuse Speed:</span>
+                  <span>{Math.round((1 / currentPlayer.fuseMultiplier) * 100)}%</span>
+                </div>
               </div>
             </div>
+
+            {/* Power-ups */}
+            {currentPlayer.powerUps.length > 0 && (
+              <div className={styles.powerUps}>
+                <h3>Power-ups</h3>
+                <div className={styles.powerUpList}>
+                  {currentPlayer.powerUps.map((powerUp, index) => (
+                    <div key={index} className={styles.powerUpItem}>
+                      <span className={styles.powerUpIcon}>{getPowerUpIcon(powerUp)}</span>
+                      <span className={styles.powerUpName}>{getPowerUpName(powerUp)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -5,7 +5,7 @@
   bottom: 0;
   left: 0;
   pointer-events: none;
-  z-index: 10;
+  z-index: 1000;
   font-family: 'Arial', sans-serif;
 }
 
@@ -21,6 +21,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  z-index: 1001;
 }
 
 .statusIndicator {
@@ -68,6 +69,7 @@
   padding: 15px;
   color: white;
   min-width: 220px;
+  z-index: 1001;
 }
 
 .scoreboard h2 {
@@ -123,6 +125,7 @@
   padding: 15px;
   color: white;
   min-width: 220px;
+  z-index: 1001;
 }
 
 .playerInfo h2 {
@@ -174,6 +177,7 @@
   padding: 15px;
   color: white;
   min-width: 220px;
+  z-index: 1001;
 }
 
 /* Responsive layout for smaller screens */
@@ -199,7 +203,7 @@
   justify-content: center;
   align-items: center;
   pointer-events: auto;
-  z-index: 100;
+  z-index: 2000;
 }
 
 .gameOverMessage {
@@ -282,4 +286,40 @@
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-20px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Power-ups */
+.powerUps {
+  margin-top: 15px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.powerUps h3 {
+  font-size: 16px;
+  margin: 0 0 8px 0;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.powerUpList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.powerUpItem {
+  display: flex;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 5px 8px;
+}
+
+.powerUpIcon {
+  font-size: 20px;
+  margin-right: 8px;
+}
+
+.powerUpName {
+  font-size: 14px;
 }
