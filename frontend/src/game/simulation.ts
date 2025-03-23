@@ -570,7 +570,7 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
       let newX = player.x;
       let newY = player.y;
 
-      const moveAmount = 0.1;
+      const moveAmount = 0.2; // Increased from 0.1 for faster movement
 
       switch (input.direction) {
         case 'up':

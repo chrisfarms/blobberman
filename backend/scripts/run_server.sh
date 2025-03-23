@@ -37,7 +37,7 @@ fi
 case "$1" in
   "quick")
     MAX_TICKS="2000"
-    RESET_TIMEOUT="10"
+    RESET_TIMEOUT="5"
     echo "Setting up a quick game"
     ;;
   "slow")

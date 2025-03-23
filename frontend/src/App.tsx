@@ -7,6 +7,8 @@ import NameInputModal from './components/NameInputModal';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useRef } from 'react';
 import { Direction } from './types/shared';
+import PlayerCamera from './components/PlayerCamera';
+import useSoundEffects from './hooks/useSoundEffects';
 
 function App() {
   const { connectionState, playerId, displayName, gameState, sendInput, setDisplayName } = useWebSocket();
@@ -14,6 +16,12 @@ function App() {
   // Reference to store the current direction for sending to the server
   const currentDirectionRef = useRef<Direction | null>(null);
   const placeBlob = useRef(false);
+
+  // Get current player data
+  const currentPlayer = gameState ? gameState.players.get(playerId) : undefined;
+
+  // Initialize sound effects
+  const { playSound } = useSoundEffects(gameState);
 
   // Handler for player controls - will be passed to the Controls component
   const handleControlsChange = (direction: Direction | null, isPlacingBlob: boolean) => {
@@ -85,7 +93,13 @@ function App() {
         />
 
         <GameScene gameState={gameState} />
-        <OrbitControls />
+        {currentPlayer && (
+          <PlayerCamera
+            player={currentPlayer}
+            gridSize={gameState.gridSize}
+            explosions={gameState.explosions}
+          />
+        )}
       </Canvas>
 
       {/* Only show controls if player has set a display name */}
