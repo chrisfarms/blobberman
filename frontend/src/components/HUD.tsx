@@ -20,6 +20,8 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(displayName || '');
+  // Add state for showing/hiding stats panel on mobile
+  const [showStatsPanelOnMobile, setShowStatsPanelOnMobile] = useState(false);
 
   // Update name input when display name changes
   useEffect(() => {
@@ -44,6 +46,11 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
     if (window.confirm('Are you sure you want to reset your player data? This will generate a new player ID.')) {
       resetPlayerData();
     }
+  };
+
+  // Toggle stats panel visibility on mobile
+  const toggleStatsPanelOnMobile = () => {
+    setShowStatsPanelOnMobile(!showStatsPanelOnMobile);
   };
 
   // Get current player data
@@ -167,9 +174,19 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
         </ul>
       </div>
 
+      {/* Stats toggle button (only visible on mobile) */}
+      {currentPlayer && (
+        <button
+          className={styles.statsToggleButton}
+          onClick={toggleStatsPanelOnMobile}
+        >
+          {showStatsPanelOnMobile ? 'Hide Stats' : 'Show Stats'}
+        </button>
+      )}
+
       {/* Combined Player & Game Info Panel */}
       {currentPlayer && (
-        <div className={styles.combinedInfoPanel}>
+        <div className={`${styles.combinedInfoPanel} ${!showStatsPanelOnMobile ? styles.hiddenOnMobile : ''}`}>
           <h2>Game Stats</h2>
           <div className={styles.infoContent}>
             {/* Player Info Section */}
