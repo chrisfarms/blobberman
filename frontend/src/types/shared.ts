@@ -14,7 +14,7 @@ export interface GameTick {
 }
 
 // Message Types
-export type MessageType = 'connect' | 'input' | 'tick';
+export type MessageType = 'connect' | 'input' | 'tick' | 'historySync';
 
 export interface ConnectMessage {
   type: 'connect';
@@ -31,4 +31,11 @@ export interface TickMessage {
   tick: GameTick;
 }
 
-export type GameMessage = ConnectMessage | InputMessage | TickMessage;
+export interface HistorySyncMessage {
+  type: 'historySync';
+  history: GameTick[];
+  fromTick: number;
+  toTick: number;
+}
+
+export type GameMessage = ConnectMessage | InputMessage | TickMessage | HistorySyncMessage;

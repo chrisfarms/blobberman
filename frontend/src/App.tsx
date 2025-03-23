@@ -7,7 +7,7 @@ import { useRef } from 'react';
 import { Direction } from './types/shared';
 
 function App() {
-  const { connectionState, playerId, latestTick, sendInput } = useWebSocket();
+  const { connectionState, playerId, gameState, sendInput } = useWebSocket();
 
   // Reference to store the current direction for sending to the server
   const currentDirectionRef = useRef<Direction | null>(null);
@@ -25,6 +25,10 @@ function App() {
       placeBlob: isPlacingBlob
     });
   };
+
+  if (gameState === null) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <>
@@ -46,7 +50,7 @@ function App() {
           shadow-mapSize-height={1024}
         />
 
-        <GameScene latestTick={latestTick} />
+        <GameScene gameState={gameState} />
         <OrbitControls />
       </Canvas>
 

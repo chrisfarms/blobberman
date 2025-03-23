@@ -2,14 +2,14 @@ package websocket
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
-// encodeMessage converts any struct to a JSON byte array
+// encodeMessage marshals a message to JSON
 func encodeMessage(message interface{}) ([]byte, error) {
-	return json.Marshal(message)
-}
-
-// decodeMessage decodes a JSON byte array into the given struct
-func decodeMessage(data []byte, v interface{}) error {
-	return json.Unmarshal(data, v)
+	data, err := json.Marshal(message)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling message: %w", err)
+	}
+	return data, nil
 }

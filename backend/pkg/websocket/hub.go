@@ -7,7 +7,11 @@ import (
 	"time"
 
 	"github.com/chrisfarms/vibes/blobberman/backend/pkg/types"
+	"github.com/chrisfarms/vibes/blobberman/backend/pkg/websocket/common"
 )
+
+// Maximum number of ticks to keep in history
+const MAX_HISTORY_SIZE = 100_000 // about 30mins of history
 
 // DebugLoggerFunc is a function type for debug logging
 type DebugLoggerFunc func(format string, args ...interface{})
@@ -15,11 +19,16 @@ type DebugLoggerFunc func(format string, args ...interface{})
 // noopDebugLogger is a no-op debug logger
 func noopDebugLogger(format string, args ...interface{}) {}
 
+// ClientMessage is a type that can be sent to clients
+type ClientMessage interface {
+	GetType() types.MessageType
+}
+
 // Client represents a connected WebSocket client
 type Client struct {
 	Hub      *Hub
 	ID       string
-	SendChan chan []byte
+	SendChan chan ClientMessage
 	Mutex    sync.Mutex
 	debugLog DebugLoggerFunc
 }
@@ -27,16 +36,16 @@ type Client struct {
 // Hub manages WebSocket client connections and game state
 type Hub struct {
 	// Registered clients
-	Clients map[*Client]bool
+	Clients map[*common.Client]bool
 
 	// Channel for registering clients
-	Register chan *Client
+	Register chan *common.Client
 
 	// Channel for unregistering clients
-	Unregister chan *Client
+	Unregister chan *common.Client
 
 	// Channel for broadcasting messages to all clients
-	Broadcast chan []byte
+	Broadcast chan common.ClientMessage
 
 	// Current game tick
 	CurrentTick uint64
@@ -44,27 +53,31 @@ type Hub struct {
 	// Inputs received for the current tick
 	CurrentInputs []types.PlayerInput
 
+	// History of past ticks
+	TickHistory []types.GameTick
+
 	// Mutex to protect input access
 	InputMutex sync.Mutex
 
 	// Debug logger function
-	debugLog DebugLoggerFunc
+	debugLog common.DebugLoggerFunc
 }
 
 // NewHub creates a new Hub instance with default no-op logger
 func NewHub() *Hub {
-	return NewHubWithDebug(noopDebugLogger)
+	return NewHubWithDebug(common.NoopDebugLogger)
 }
 
 // NewHubWithDebug creates a new Hub instance with the provided debug logger
-func NewHubWithDebug(debugLog DebugLoggerFunc) *Hub {
+func NewHubWithDebug(debugLog common.DebugLoggerFunc) *Hub {
 	return &Hub{
-		Clients:       make(map[*Client]bool),
-		Register:      make(chan *Client),
-		Unregister:    make(chan *Client),
-		Broadcast:     make(chan []byte, 1),
+		Clients:       make(map[*common.Client]bool),
+		Register:      make(chan *common.Client),
+		Unregister:    make(chan *common.Client),
+		Broadcast:     make(chan common.ClientMessage, 1),
 		CurrentTick:   0,
 		CurrentInputs: make([]types.PlayerInput, 0),
+		TickHistory:   make([]types.GameTick, 0, MAX_HISTORY_SIZE),
 		debugLog:      debugLog,
 	}
 }
@@ -84,6 +97,9 @@ func (h *Hub) Run() {
 			clientCount := len(h.Clients)
 			log.Printf("Client connected: %s (total: %d)", client.ID, clientCount)
 			h.debugLog("Client %s connected from, total clients: %d", client.ID, clientCount)
+
+			// Send history to the new client if we have any
+			h.sendHistoryToClient(client)
 
 		case client := <-h.Unregister:
 			if _, ok := h.Clients[client]; ok {
@@ -106,12 +122,43 @@ func (h *Hub) Run() {
 					delete(h.Clients, client)
 				}
 			}
-			h.debugLog("Broadcast message to %d clients", recipientCount)
+			h.debugLog("Broadcast message of type %s to %d clients", message.GetType(), recipientCount)
 
 		case <-ticker.C:
 			// Process game tick
 			h.processGameTick()
 		}
+	}
+}
+
+// sendHistoryToClient sends the game history to a newly connected client
+func (h *Hub) sendHistoryToClient(client *common.Client) {
+	h.InputMutex.Lock()
+	defer h.InputMutex.Unlock()
+
+	historyLength := len(h.TickHistory)
+	if historyLength == 0 {
+		h.debugLog("No history to send to client %s", client.ID)
+		return
+	}
+
+	// Create a history sync message
+	historyMsg := types.HistorySyncMessage{
+		Type:     types.MessageTypeHistorySync,
+		History:  h.TickHistory,
+		FromTick: h.TickHistory[0].Tick,
+		ToTick:   h.TickHistory[historyLength-1].Tick,
+	}
+
+	h.debugLog("Sending history to client %s (ticks %d to %d, %d total ticks)",
+		client.ID, historyMsg.FromTick, historyMsg.ToTick, historyLength)
+
+	// Send the message directly
+	select {
+	case client.SendChan <- historyMsg:
+		h.debugLog("History message sent to client %s", client.ID)
+	default:
+		h.debugLog("Failed to send history message to client %s", client.ID)
 	}
 }
 
@@ -140,21 +187,21 @@ func (h *Hub) processGameTick() {
 		h.debugLog("Tick %d: No inputs to process", h.CurrentTick)
 	}
 
+	// Add the current tick to history
+	if len(h.TickHistory) >= MAX_HISTORY_SIZE {
+		// If history is full, remove the oldest tick
+		h.TickHistory = h.TickHistory[1:]
+	}
+	h.TickHistory = append(h.TickHistory, tickMessage.Tick)
+
 	// Reset inputs for the next tick
 	h.CurrentInputs = make([]types.PlayerInput, 0)
 	h.CurrentTick++
 	h.InputMutex.Unlock()
 
-	// Convert to JSON and broadcast
-	message, err := encodeMessage(tickMessage)
-	if err != nil {
-		log.Printf("Error encoding tick message: %v", err)
-		h.debugLog("Error encoding tick message: %v", err)
-		return
-	}
-
+	// Broadcast the tick message directly
 	select {
-	case h.Broadcast <- message:
+	case h.Broadcast <- tickMessage:
 	default:
 		h.debugLog("Failed to send message to broadcast channel")
 	}

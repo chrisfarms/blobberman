@@ -4,10 +4,12 @@ import {
   GameTick,
   ConnectMessage,
   TickMessage,
-  InputMessage
+  InputMessage,
+  HistorySyncMessage
 } from '@/types/shared';
 import { ConnectionState } from '@/types/ConnectionState';
 import { ENV } from '@/utils/env';
+import { createInitialGameState, GameState, processGameTick } from '@/game/simulation';
 
 // Get WebSocket URL from environment
 const WS_URL = ENV.WS_URL;
@@ -15,20 +17,73 @@ const WS_URL = ENV.WS_URL;
 export interface UseWebSocketResult {
   connectionState: ConnectionState;
   playerId: string | null;
-  latestTick: GameTick | null;
+  gameState: GameState | null;
   sendInput: (input: Omit<PlayerInput, 'playerId'>) => void;
 }
 
 export const useWebSocket = (): UseWebSocketResult => {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [playerId, setPlayerId] = useState<string | null>(null);
-  const [latestTick, setLatestTick] = useState<GameTick | null>(null);
-
+  const [gameState, setGameState] = useState<GameState>(createInitialGameState());
+  const isProcessingHistory = useRef<boolean>(true);
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
+  // Queue to store ticks that arrive while processing history
+  const pendingTicksRef = useRef<GameTick[]>([]);
+
+  // Process game history from server
+  const processGameHistory = useCallback((historyMsg: HistorySyncMessage) => {
+    console.log(`Processing game history: ticks ${historyMsg.fromTick} to ${historyMsg.toTick} (${historyMsg.history.length} ticks)`);
+
+    // Process history with small delays to avoid freezing the UI
+    const history = historyMsg.history;
+    let currentIndex = 0;
+
+    const processNextBatch = () => {
+      const batchSize = 20; // Process 20 ticks at once
+      const endIndex = Math.min(currentIndex + batchSize, history.length);
+
+      // Process this batch of ticks
+      for (let i = currentIndex; i < endIndex; i++) {
+        setGameState(currentState => processGameTick(currentState, history[i]));
+      }
+
+      currentIndex = endIndex;
+
+      if (currentIndex < history.length) {
+        // Schedule next batch
+        setTimeout(processNextBatch, 0);
+      } else {
+        // History processing complete
+        console.log('History processing complete');
+        isProcessingHistory.current = false;
+
+        // Process any pending ticks that came in while we were replaying history
+        if (pendingTicksRef.current.length > 0) {
+          console.log(`Processing ${pendingTicksRef.current.length} pending ticks after history`);
+
+          // Sort ticks by tick number to ensure correct order
+          pendingTicksRef.current.sort((a, b) => a.tick - b.tick);
+
+          // Process each pending tick
+          for (const tick of pendingTicksRef.current) {
+            setGameState(currentState => processGameTick(currentState, tick));
+          }
+
+          // Clear the queue
+          pendingTicksRef.current = [];
+        }
+      }
+    };
+
+    // Start processing
+    processNextBatch();
+  }, []);
+
   // Function to connect to WebSocket server
   const connect = useCallback(() => {
+
     // Clear any existing reconnect timeout
     if (reconnectTimeoutRef.current !== null) {
       window.clearTimeout(reconnectTimeoutRef.current);
@@ -67,14 +122,31 @@ export const useWebSocket = (): UseWebSocketResult => {
 
           case 'tick':
             const tickMsg = message as TickMessage;
-            setLatestTick(tickMsg.tick);
+
+            // If we're processing history, queue new ticks for later
+            if (isProcessingHistory.current) {
+              console.log(`Queuing tick ${tickMsg.tick.tick} while processing history`);
+              pendingTicksRef.current.push(tickMsg.tick);
+            } else {
+              setGameState(currentState => processGameTick(currentState, tickMsg.tick));
+            }
+            break;
+
+          case 'historySync':
+            const historyMsg = message as HistorySyncMessage;
+            console.log(`Received history sync: ${historyMsg.history.length} ticks`);
+
+            if (historyMsg.history.length > 0) {
+              // Process the game history
+              processGameHistory(historyMsg);
+            }
             break;
 
           default:
             console.warn('Unhandled message type:', message.type);
         }
       } catch (error) {
-        console.error('Error parsing message:', error);
+        console.error('Error parsing message:', error, event.data);
       }
     };
 
@@ -93,7 +165,7 @@ export const useWebSocket = (): UseWebSocketResult => {
     socket.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
-  }, []);
+  }, [processGameHistory]);
 
   // Function to send player input to the server
   const sendInput = useCallback((input: Omit<PlayerInput, 'playerId'>) => {
@@ -129,7 +201,7 @@ export const useWebSocket = (): UseWebSocketResult => {
   return {
     connectionState,
     playerId,
-    latestTick,
+    gameState,
     sendInput
   };
 };
