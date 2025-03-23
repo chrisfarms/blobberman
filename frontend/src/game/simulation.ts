@@ -390,9 +390,6 @@ function checkPlayerHit(state: GameState): void {
 
     // Check if the player is in the explosion radius
     for (const explosion of explosions) {
-      // Skip if it's the player's own explosion
-      if (explosion.playerId === playerId) continue;
-
       // Check center of explosion
       const playerCellX = Math.floor(player.x + state.gridSize / 2);
       const playerCellY = Math.floor(player.y + state.gridSize / 2);
