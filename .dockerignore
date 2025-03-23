@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+.github
+
+# Node.js / Frontend
+**/node_modules
+**/dist
+**/build
+**/.cache
+**/.pnpm-store
+**/coverage
+**/.env
+**/.env.*
+
+# Go / Backend
+backend/server
+**/vendor
+**/*.exe
+**/*.test
+**/*.prof
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Misc
+README.md
+docker-compose.yml
+Dockerfile
+.dockerignore

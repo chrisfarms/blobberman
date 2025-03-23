@@ -1,6 +1,6 @@
 # Blobberman
 
-A massively multiplayer, paint-splashing twist on the classic Bomberman formula.
+A multiplayer, paint-splashing twist on the classic Bomberman formula.
 
 ## Project Overview
 
@@ -102,3 +102,59 @@ The frontend development server will start on port 3000 by default.
 - **Frontend**: TypeScript, React, Three.js, React Three Fiber, NippleJS
 - **Backend**: Go, WebSockets
 - **Build Tools**: Vite, pnpm
+
+## Running with Docker
+
+The easiest way to run Blobberman is using Docker:
+
+```bash
+# Build and run with docker-compose
+docker-compose up -d
+
+# Or build and run manually
+docker build -t blobberman .
+docker run -p 8080:8080 blobberman
+```
+
+The game will be available at http://localhost:8080
+
+## Development
+
+### Frontend
+
+The frontend is a React application built with TypeScript, Vite, and Three.js:
+
+```bash
+cd frontend
+pnpm install
+pnpm run dev
+```
+
+### Backend
+
+The backend is written in Go:
+
+```bash
+cd backend
+go run cmd/server.go
+```
+
+## Building for Production
+
+You can build the entire application using the included build script:
+
+```bash
+./scripts/build.sh
+```
+
+This will:
+1. Build the frontend
+2. Copy the built files to the backend's public directory
+3. Build the backend server
+
+After building, you can run the server:
+
+```bash
+cd backend
+./server
+```
