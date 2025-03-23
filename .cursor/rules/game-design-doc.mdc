@@ -1,0 +1,140 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# **Game Design Document: "Blobberman"**
+*A massively multiplayer, paint-splashing twist on the classic Bomberman formula.*
+
+---
+
+## **1. Game Overview**
+
+**Title:** Blobberman
+**Genre:** Multiplayer Action, Competitive Arena, .io-style
+**Platform:** Web (Three.js), PC, Mobile
+**Players:** Massively Multiplayer (dozens to hundreds in one arena)
+**Core Mechanic:** Drop paint bombs to eliminate players, break obstacles, and paint the most ground before time runs out.
+**Visual Style:** Cute, colorful, and smooth "squircle" art style with **3D rendering** at a **top-down/slightly isometric** angle.
+
+---
+
+## **2. Core Gameplay Mechanics**
+
+### **2.1 Player Movement**
+- The game **simulates movement in a 2D grid** but **renders in 3D** with a **top-down, slightly isometric perspective**.
+- Movement is **tile-based but smooth** (not locked to grid).
+- Players can move **in four directions** (up, down, left, right).
+- Players can’t pass through solid walls but can move through painted areas.
+
+### **2.2 Paint Bombs**
+- Players drop **small paint bombs** that **explode in a cross pattern** (up, down, left, right).
+- The **explosion stops at the first obstacle or player** it hits.
+- The explosion **paints the ground** in the player’s color.
+- The bomb **destroys the first breakable wall** it contacts.
+- Any player hit by the explosion **loses all their painted area and power-ups** but is not eliminated.
+
+### **2.3 Painting and Scoring**
+- The **goal** is to **paint the most ground** with your color before the match ends.
+- Areas already painted by another player **can be overwritten** by a new explosion.
+- If a player gets hit by an explosion, they **lose all their painted territory** (it resets to neutral).
+- At the end of the match, the player **with the most painted tiles wins**.
+- A **real-time leaderboard** updates during gameplay.
+
+### **2.4 Obstacles and Walls**
+- **Breakable Walls:** Destroyed by paint bombs, revealing **new paths**.
+- **Unbreakable Walls:** Cannot be destroyed and serve as permanent barriers.
+- **Power-Up Blocks:** Some walls hide **power-ups** when destroyed.
+
+---
+
+## **3. Game Flow**
+
+### **3.1 Match Start**
+- Players **spawn at random locations** on the map.
+- A **countdown** begins before the match starts.
+
+### **3.2 During the Match**
+- Players drop **paint bombs** to **paint the arena**, **break walls**, and **eliminate opponents' progress**.
+- Players who get hit by a bomb **lose all their painted area and power-ups** but remain in the game.
+- The **map constantly changes** as walls are destroyed and areas are repainted.
+- A timer **counts down** the match duration (e.g., 3-5 minutes).
+
+### **3.3 End of Match**
+- When the timer reaches **0**, the match **ends**.
+- The player with the **most painted tiles** **wins**.
+- A results screen **shows rankings**, total paint coverage, and other stats.
+
+---
+
+## **4. Power-Ups & Upgrades**
+Power-ups are hidden in **breakable walls** and provide **temporary or permanent effects**. However, power-ups can also be **destroyed if hit by paint** before a player collects them. Additionally, when a player gets hit by a splat, they **lose all their power-ups**.
+
+### **4.1 Standard Power-Ups**
+- **Extra Paint Bombs** → Increases the number of bombs a player can drop at once.
+- **Longer Paint Splat** → Extends the explosion radius of paint bombs.
+- **Speed Boost** → Temporarily increases movement speed.
+- **Splat Shield** → Prevents losing territory and power-ups when hit (temporary).
+- **Splash Jump** → Allows a short jump over one tile.
+
+### **4.2 Debuff Power-Ups** (Negative Effects)
+Some power-ups are actually **debuffs** and can make gameplay more challenging:
+- **Shorter Fuse** → Bombs explode faster, making timing more difficult.
+- **Paint Drain** → Temporarily reduces the amount of ground a bomb paints.
+- **Sticky Feet** → Slows the player's movement speed.
+
+---
+
+## **5. Multiplayer & Networking**
+
+### **5.1 Matchmaking**
+- Players enter a **shared arena** with **many others** (like .io games).
+- **Matches are continuous**, meaning players can **join mid-match** without waiting.
+- New players **spawn in empty areas** to avoid instant eliminations.
+
+### **5.2 Player Interaction**
+- Players can **bump into each other**, slightly pushing opponents.
+- Players can see **real-time leaderboard rankings**.
+
+---
+
+## **6. Level Design**
+
+### **6.1 Map Size & Layout**
+- Levels are **much larger than Bomberman** to support **dozens or hundreds of players**.
+- The map has **a mix of open areas, maze-like sections, and power-up zones**.
+- Some maps have **moving obstacles** or **environmental hazards**.
+
+### **6.2 Dynamic Level Changes**
+- Players **gradually reshape the level** by breaking walls.
+- Some areas may **change over time**, introducing **new paths and barriers**.
+
+---
+
+## **7. Art & Aesthetics**
+
+### **7.1 Visual Style**
+- **Colorful, cartoony, and vibrant** with a **"squircle" (soft, rounded shapes) art style**.
+- Players are **squishy blob-like characters** with unique colors.
+- The game is **rendered in 3D**, but **simulated as a 2D grid**, viewed from a **top-down/slightly isometric angle**.
+- Explosions create **paint splats** with a **satisfying, fluid look**.
+
+### **7.2 Paint Physics**
+- Paint spreads with **smooth splat effects**.
+- The ground gets **progressively messier** as players fight for coverage.
+
+---
+
+## **8. Sound & Music**
+- **Upbeat, fast-paced music** to match the intensity.
+- **Satisfying "splat" sound effects** for explosions.
+- **Subtle background sounds** (crowds cheering, distant paint splats).
+
+---
+
+## **10. Conclusion**
+**Blobberman** is a fast-paced, **massively multiplayer competitive game** where players **battle for paint dominance**. Instead of eliminations, players must **protect their painted area**, making strategy and positioning key to victory.
+
+With its **cute, rounded "squircle" aesthetic**, **3D rendering with a slightly isometric perspective**, and **chaotic multiplayer gameplay**, the game creates a fresh, fun take on the Bomberman-style formula.
+

@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Executing Commands
+
+- NEVER execute commands that start web servers, backends, or development server, instead simply mention how to start it.
+- It is important to not attempt to run commands like pnpm dev, pnpm start, npm run dev etc as they are likely already running elsewhere.
+- You never execute git commands unless directly prompted to.

@@ -1,0 +1,46 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Tech Stack
+
+**decisions for tech stack and library choices**
+
+## Architecture
+
+- Our multiplayer games are structured using a deterministic lockstep networking architecture.
+- Game Clients collect inputs and send them to the game's relay, which sends the inputs back to all connected clients for processing.
+- We do NOT calculate game state on the server, the servers are just dumb relays for inputs.
+- All game clients compute the game state independently and stay in sync because the the simulation loop is deterministic and is being executed with identical inputs.
+
+## General target platforms
+
+- We target the web platform (modern web browsers like Chrome, Safari, Edge)
+- We specifically target web-browsers on mobile devices
+- We support touch interfaces
+
+## Frontend / Game Client
+
+- We use Typescript for all game client code
+- We use vite to build client code, making use of loaders and plugins where suitable (like GLTF loaders)
+- We use pnpm for managing dependecies
+- We use Three js with React Three Fibre for 3D rendering
+- We make reusable components for our game models, meshes, 
+- We use Nipple JS to produce joystick and touch controls for touch devices
+- Within the game client we decouple "simulation" logic from "rendering" logic
+  * simulation code MUST be determinisitic and created as pure typescript functions
+  * rendering code is generally made with react three fibre, and is rendering the current game state
+
+## Backend / Input Relay / Server
+
+The Backend for our apps is a very dumb simple relay. It recv a stream of inputs from all connected clients over websockets, and relays all inputs to all connected clients. It does no state processing. It's job is to provide a consistent stream of updates to drive the simulation loop in the game clients. We aim for around 20hz. All player inputs are emitted on this regular update tick from the relay.
+
+- We use Go (golang) for backend code
+- We use websockets to client connections.
+
+## Networking
+
+- We use websockets for communication between client and server
+- We do not use the socket.io library and use the 'ws' library where possible. 
