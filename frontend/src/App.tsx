@@ -1,5 +1,4 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
 import GameScene from './components/GameScene';
 import Controls from './components/Controls';
 import HUD from './components/HUD';
@@ -21,7 +20,7 @@ function App() {
   const currentPlayer = gameState ? gameState.players.get(playerId) : undefined;
 
   // Initialize sound effects
-  const { playSound } = useSoundEffects(gameState);
+  useSoundEffects(gameState);
 
   // Handler for player controls - will be passed to the Controls component
   const handleControlsChange = (direction: Direction | null, isPlacingBlob: boolean) => {

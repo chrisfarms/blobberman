@@ -46,11 +46,12 @@ export default function useSoundEffects(gameState: GameState | null) {
   useEffect(() => {
     const music = getAudio('background-music');
     music.loop = true;
-    music.volume = 0.4;
+    music.volume = 0.2;
 
     // Add event listener for user interaction to start music
     const startMusic = () => {
-      music.play().catch(e => console.error("Error playing music:", e));
+        // disable for now
+      //music.play().catch(e => console.error("Error playing music:", e));
       // Clean up event listeners after first interaction
       document.removeEventListener('click', startMusic);
       document.removeEventListener('keydown', startMusic);

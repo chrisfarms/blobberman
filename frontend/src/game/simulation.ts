@@ -524,18 +524,25 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
       let attempts = 0;
 
       while (attempts < 100) {
-        // Try random positions in the grid
-        const x = randomInt(2, newState.gridSize - 2) - newState.gridSize/2;
-        const y = randomInt(2, newState.gridSize - 2) - newState.gridSize/2;
+        // Try random positions in the grid that are not too close to the edge
+        const x = randomInt(3, newState.gridSize - 3) - newState.gridSize/2;
+        const y = randomInt(3, newState.gridSize - 3) - newState.gridSize/2;
+
+        console.log(`Spawn attempt ${attempts} for ${input.playerId}: position (${x}, ${y})`);
 
         // Check if position is valid
         if (canMoveTo(newState.grid, x, y)) {
           spawnX = x;
           spawnY = y;
+          console.log(`Player ${input.playerId} spawning at (${spawnX}, ${spawnY})`);
           break;
         }
 
         attempts++;
+      }
+
+      if (attempts >= 100) {
+        console.warn(`Could not find spawn point for player ${input.playerId} after 100 attempts, using default position`);
       }
 
       // New player, create initial state
@@ -567,7 +574,7 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
       let newX = player.x;
       let newY = player.y;
 
-      const moveAmount = 0.2; // Increased from 0.1 for faster movement
+      const moveAmount = 0.3; // Increased from 0.2 for even faster movement
 
       switch (input.direction) {
         case 'up':
