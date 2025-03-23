@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { GameState, PowerUpType } from '@/game/simulation';
 import styles from './HUD.module.css';
 import { useWebSocket } from '@/hooks/useWebSocket';
@@ -8,7 +8,43 @@ interface HUDProps {
 }
 
 const HUD: React.FC<HUDProps> = ({ gameState }) => {
-  const { playerId, connectionState } = useWebSocket();
+  const {
+    playerId,
+    displayName,
+    connectionState,
+    resetCountdown,
+    playerDisplayNames,
+    setDisplayName,
+    resetPlayerData
+  } = useWebSocket();
+
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(displayName || '');
+
+  // Update name input when display name changes
+  useEffect(() => {
+    setNameInput(displayName || '');
+  }, [displayName]);
+
+  // Helper function to get player display name or fallback to ID
+  const getPlayerName = (id: string) => {
+    if (id === playerId) return displayName || 'You';
+    return playerDisplayNames[id] || `Player ${id.substring(0, 6)}`;
+  };
+
+  // Handle display name submit
+  const handleNameSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setDisplayName(nameInput);
+    setIsEditingName(false);
+  };
+
+  // Handle player data reset
+  const handleResetData = () => {
+    if (window.confirm('Are you sure you want to reset your player data? This will generate a new player ID.')) {
+      resetPlayerData();
+    }
+  };
 
   // Get current player data
   const currentPlayer = playerId ? gameState.players.get(playerId) : null;
@@ -83,7 +119,28 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
       <div className={styles.connectionStatus}>
         <div className={`${styles.statusIndicator} ${styles[connectionState]}`}></div>
         <span>{connectionState}</span>
-        {playerId && <span className={styles.playerId}>ID: {playerId.substring(0, 6)}</span>}
+        <div className={styles.playerInfo}>
+          {/* Only show player name edit form if there's a display name and we're in edit mode */}
+          {displayName && isEditingName ? (
+            <form onSubmit={handleNameSubmit} className={styles.nameEditForm}>
+              <input
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                placeholder="Enter your name"
+                maxLength={15}
+                className={styles.nameInput}
+                autoFocus
+              />
+              <button type="submit" className={styles.saveButton}>Save</button>
+            </form>
+          ) : displayName ? (
+            <div className={styles.playerName} onClick={() => setIsEditingName(true)}>
+              {displayName} ✏️
+            </div>
+          ) : null}
+          {displayName && <button onClick={handleResetData} className={styles.resetButton}>Reset Player Data</button>}
+        </div>
       </div>
 
       {/* Scoreboard */}
@@ -100,7 +157,7 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
                 style={{ backgroundColor: score.color }}
               />
               <span className={styles.playerName}>
-                {score.playerId === playerId ? 'You' : `Player ${score.playerId.substring(0, 6)}`}
+                {getPlayerName(score.playerId)}
               </span>
               <span className={styles.playerCount}>
                 {score.count} tiles
@@ -110,43 +167,68 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
         </ul>
       </div>
 
-      {/* Player info */}
+      {/* Combined Player & Game Info Panel */}
       {currentPlayer && (
-        <div className={styles.playerInfo}>
-          <h2>Your Stats</h2>
-          <div className={styles.playerInfoContent}>
-            <div className={styles.statRow}>
-              <div
-                className={styles.playerColorLarge}
-                style={{ backgroundColor: currentPlayer.color }}
-              />
-              <div className={styles.playerDetails}>
-                <div className={styles.detailRow}>
-                  <span>Rank:</span>
-                  <span>{playerRank > 0 ? `#${playerRank}` : 'N/A'}</span>
-                </div>
-                <div className={styles.detailRow}>
-                  <span>Tiles:</span>
-                  <span>{currentPlayerTiles}</span>
-                </div>
-                <div className={styles.detailRow}>
-                  <span>Bombs:</span>
-                  <span>{currentPlayer.bombsPlaced}/{currentPlayer.maxBombs}</span>
-                </div>
-                <div className={styles.detailRow}>
-                  <span>Explosion Size:</span>
-                  <span>{currentPlayer.explosionSize}</span>
-                </div>
-                <div className={styles.detailRow}>
-                  <span>Fuse Speed:</span>
-                  <span>{Math.round((1 / currentPlayer.fuseMultiplier) * 100)}%</span>
+        <div className={styles.combinedInfoPanel}>
+          <h2>Game Stats</h2>
+          <div className={styles.infoContent}>
+            {/* Player Info Section */}
+            <div className={styles.infoSection}>
+              <h3>Your Stats</h3>
+              <div className={styles.statRow}>
+                <div
+                  className={styles.playerColorLarge}
+                  style={{ backgroundColor: currentPlayer.color }}
+                />
+                <div className={styles.playerDetails}>
+                  <div className={styles.detailRow}>
+                    <span>Rank:</span>
+                    <span>{playerRank > 0 ? `#${playerRank}` : 'N/A'}</span>
+                  </div>
+                  <div className={styles.detailRow}>
+                    <span>Tiles:</span>
+                    <span>{currentPlayerTiles}</span>
+                  </div>
+                  <div className={styles.detailRow}>
+                    <span>Bombs:</span>
+                    <span>{currentPlayer.bombsPlaced}/{currentPlayer.maxBombs}</span>
+                  </div>
+                  <div className={styles.detailRow}>
+                    <span>Explosion Size:</span>
+                    <span>{currentPlayer.explosionSize}</span>
+                  </div>
+                  <div className={styles.detailRow}>
+                    <span>Fuse Speed:</span>
+                    <span>{Math.round((1 / currentPlayer.fuseMultiplier) * 100)}%</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Power-ups */}
+            {/* Game Info Section */}
+            <div className={styles.infoSection}>
+              <h3>Match Info</h3>
+              <div className={styles.detailRow}>
+                <span>Time Left:</span>
+                <span>{calculateRemainingTime()}</span>
+              </div>
+              <div className={styles.detailRow}>
+                <span>Active Bombs:</span>
+                <span>{totalBombs}</span>
+              </div>
+              <div className={styles.detailRow}>
+                <span>Total Painted:</span>
+                <span>{totalPaintedTiles} tiles</span>
+              </div>
+              <div className={styles.detailRow}>
+                <span>Players:</span>
+                <span>{gameState.players.size}</span>
+              </div>
+            </div>
+
+            {/* Power-ups Section */}
             {currentPlayer.powerUps.length > 0 && (
-              <div className={styles.powerUps}>
+              <div className={styles.infoSection}>
                 <h3>Power-ups</h3>
                 <div className={styles.powerUpList}>
                   {currentPlayer.powerUps.map((powerUp, index) => (
@@ -162,26 +244,6 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
         </div>
       )}
 
-      {/* Game info */}
-      <div className={styles.gameInfo}>
-        <div className={styles.detailRow}>
-          <span>Time Left:</span>
-          <span>{calculateRemainingTime()}</span>
-        </div>
-        <div className={styles.detailRow}>
-          <span>Active Bombs:</span>
-          <span>{totalBombs}</span>
-        </div>
-        <div className={styles.detailRow}>
-          <span>Total Painted:</span>
-          <span>{totalPaintedTiles} tiles</span>
-        </div>
-        <div className={styles.detailRow}>
-          <span>Players:</span>
-          <span>{gameState.players.size}</span>
-        </div>
-      </div>
-
       {/* Game over message */}
       {gameState.gameOver && (
         <div className={styles.gameOverOverlay}>
@@ -189,7 +251,7 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
             <h1>Game Over!</h1>
             {gameState.winner ? (
               <>
-                <h2>Winner: {gameState.winner === playerId ? 'You' : `Player ${gameState.winner.substring(0, 6)}`}</h2>
+                <h2>Winner: {getPlayerName(gameState.winner)}</h2>
                 {gameState.players.get(gameState.winner) && (
                   <div
                     className={styles.winnerColor}
@@ -210,13 +272,21 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
                       style={{ backgroundColor: score.color }}
                     />
                     <span>
-                      {score.playerId === playerId ? 'You' : `Player ${score.playerId.substring(0, 6)}`}
+                      {getPlayerName(score.playerId)}
                     </span>
                     <span>{score.count} tiles</span>
                   </li>
                 ))}
               </ul>
             </div>
+
+            {resetCountdown !== null && (
+              <div className={styles.resetCountdown}>
+                <h3>New Game Starting In</h3>
+                <div className={styles.countdownTimer}>{resetCountdown}</div>
+                <p>seconds</p>
+              </div>
+            )}
           </div>
         </div>
       )}

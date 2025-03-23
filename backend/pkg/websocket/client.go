@@ -52,29 +52,21 @@ func HandleWebSocketWithDebug(hub *Hub, w http.ResponseWriter, r *http.Request, 
 	remoteAddr := r.RemoteAddr
 	debugLog("Connection from %s upgraded to WebSocket", remoteAddr)
 
-	// Generate a unique client ID
-	clientID := uuid.New().String()
-	debugLog("Assigned client ID %s to connection from %s", clientID, remoteAddr)
+	// Generate a temporary client ID
+	// The client will send their persistent ID after connection
+	tempClientID := "temp-" + uuid.New().String()
+	debugLog("Assigned temporary client ID %s to connection from %s", tempClientID, remoteAddr)
 
 	// Create a new client
 	client := &common.Client{
 		Hub:      hub,
-		ID:       clientID,
+		ID:       tempClientID,
 		SendChan: make(chan common.ClientMessage, 256),
 		DebugLog: debugLog,
 	}
 
 	// Register client with hub
 	hub.Register <- client
-
-	// Send a connect message to the client
-	connectMsg := types.ConnectMessage{
-		Type:     types.MessageTypeConnect,
-		PlayerID: clientID,
-	}
-
-	// Send directly as a message object, not as bytes
-	client.SendChan <- connectMsg
 
 	// Start goroutines for pumping messages
 	go writePump(client, conn)
@@ -112,32 +104,108 @@ func readPump(client *common.Client, hub *Hub, conn *websocket.Conn) {
 
 		client.DebugLog("Received message from client %s: %s", client.ID, string(message))
 
-		// Try to decode as an input message
-		var inputMsg types.InputMessage
-		if err := json.Unmarshal(message, &inputMsg); err != nil {
-			log.Printf("Error decoding input message: %v", err)
-			client.DebugLog("Error decoding input message from client %s: %v", client.ID, err)
+		// Try to decode the message type first to determine handling
+		var baseMsg struct {
+			Type types.MessageType `json:"type"`
+		}
+		if err := json.Unmarshal(message, &baseMsg); err != nil {
+			log.Printf("Error decoding message type: %v", err)
+			client.DebugLog("Error decoding message type from client %s: %v", client.ID, err)
 			continue
 		}
 
-		// Verify input message type
-		if inputMsg.Type != types.MessageTypeInput {
-			client.DebugLog("Invalid message type from client %s: %s", client.ID, inputMsg.Type)
-			continue
+		// Handle different message types
+		switch baseMsg.Type {
+		case types.MessageTypeInput:
+			// Handle input message
+			var inputMsg types.InputMessage
+			if err := json.Unmarshal(message, &inputMsg); err != nil {
+				log.Printf("Error decoding input message: %v", err)
+				client.DebugLog("Error decoding input message from client %s: %v", client.ID, err)
+				continue
+			}
+
+			// Ensure the player ID matches the client ID
+			if inputMsg.Input.PlayerID != client.ID {
+				client.DebugLog("Player ID mismatch: got %s, expected %s", inputMsg.Input.PlayerID, client.ID)
+				inputMsg.Input.PlayerID = client.ID
+			}
+
+			// Debug log the input
+			inputJson, _ := json.Marshal(inputMsg.Input)
+			client.DebugLog("Valid input from client %s: %s", client.ID, string(inputJson))
+
+			// Add input to the current tick
+			hub.AddInput(inputMsg.Input)
+
+		case types.MessageTypeDisplayName:
+			// Handle display name message
+			var displayNameMsg types.DisplayNameMessage
+			if err := json.Unmarshal(message, &displayNameMsg); err != nil {
+				log.Printf("Error decoding display name message: %v", err)
+				client.DebugLog("Error decoding display name message from client %s: %v", client.ID, err)
+				continue
+			}
+
+			// Ensure the player ID matches the client ID
+			if displayNameMsg.PlayerID != client.ID {
+				client.DebugLog("Player ID mismatch in display name message: got %s, expected %s",
+					displayNameMsg.PlayerID, client.ID)
+				displayNameMsg.PlayerID = client.ID
+			}
+
+			// Update display name in the hub
+			client.DebugLog("Updating display name for client %s: %s", client.ID, displayNameMsg.DisplayName)
+			hub.UpdateDisplayName(client.ID, displayNameMsg.DisplayName)
+
+		case types.MessageTypeClientId:
+			// Handle client ID message
+			var clientIdMsg types.ClientIdMessage
+			if err := json.Unmarshal(message, &clientIdMsg); err != nil {
+				log.Printf("Error decoding client ID message: %v", err)
+				client.DebugLog("Error decoding client ID message from client %s: %v", client.ID, err)
+				continue
+			}
+
+			oldId := client.ID
+			newId := clientIdMsg.PlayerID
+
+			// Update the client's ID
+			client.DebugLog("Updating client ID from %s to %s", oldId, newId)
+
+			// Transfer any data associated with the old ID to the new ID
+			hub.UpdateClientId(oldId, newId)
+
+			// Update the client's ID
+			client.ID = newId
+
+			// Optional: Log the ID update to server logs
+			log.Printf("Client ID updated: %s -> %s", oldId, newId)
+
+			// Send a new connect message to confirm the client ID update
+			connectMsg := types.ConnectMessage{
+				Type:         types.MessageTypeConnect,
+				PlayerID:     client.ID,
+				MaxTicks:     hub.maxHistorySize,
+				TickInterval: hub.tickInterval,
+			}
+
+			select {
+			case client.SendChan <- connectMsg:
+				client.DebugLog("Connect message sent to client after ID update %s", client.ID)
+			default:
+				client.DebugLog("Failed to send connect message to client after ID update %s", client.ID)
+			}
+
+			// Send history to the client again
+			hub.sendHistoryToClient(client)
+
+			// Send current display names to the client
+			hub.SendDisplayNamesToClient(client)
+
+		default:
+			client.DebugLog("Unknown message type from client %s: %s", client.ID, baseMsg.Type)
 		}
-
-		// Ensure the player ID matches the client ID
-		if inputMsg.Input.PlayerID != client.ID {
-			client.DebugLog("Player ID mismatch: got %s, expected %s", inputMsg.Input.PlayerID, client.ID)
-			inputMsg.Input.PlayerID = client.ID
-		}
-
-		// Debug log the input
-		inputJson, _ := json.Marshal(inputMsg.Input)
-		client.DebugLog("Valid input from client %s: %s", client.ID, string(inputJson))
-
-		// Add input to the current tick
-		hub.AddInput(inputMsg.Input)
 	}
 }
 

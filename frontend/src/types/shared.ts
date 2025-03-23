@@ -40,4 +40,20 @@ export interface HistorySyncMessage {
   toTick: number;
 }
 
-export type GameMessage = ConnectMessage | InputMessage | TickMessage | HistorySyncMessage;
+export type ResetMessage = {
+  type: 'reset';
+  resetTimeSec: number;   // Total duration of the reset period in seconds
+  countdownSec: number;   // Current countdown value in seconds
+};
+
+export type DisplayNameUpdateMessage = {
+  type: 'displayName';
+  displayNames: Record<string, string>;  // Map of player IDs to display names
+};
+
+export type ClientIdMessage = {
+  type: 'clientId';
+  playerId: string;       // Client's persistent player ID
+};
+
+export type GameMessage = ConnectMessage | InputMessage | TickMessage | HistorySyncMessage | ResetMessage | DisplayNameUpdateMessage | ClientIdMessage;

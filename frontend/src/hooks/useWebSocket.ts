@@ -5,32 +5,40 @@ import {
   ConnectMessage,
   TickMessage,
   InputMessage,
-  HistorySyncMessage
+  HistorySyncMessage,
+  ResetMessage,
+  DisplayNameUpdateMessage
 } from '@/types/shared';
 import { ConnectionState } from '@/types/ConnectionState';
 import { ENV } from '@/utils/env';
 import { createInitialGameState, GameState, processGameTick } from '@/game/simulation';
+import { usePlayerData } from './usePlayerData';
 
 // Get WebSocket URL from environment
 const WS_URL = ENV.WS_URL;
 
 export interface UseWebSocketResult {
   connectionState: ConnectionState;
-  playerId: string | null;
-  gameState: GameState | null;
+  playerId: string;
+  displayName: string | null;
+  gameState: GameState;
+  resetCountdown: number | null;
+  playerDisplayNames: Record<string, string>;
   sendInput: (input: Omit<PlayerInput, 'playerId'>) => void;
+  setDisplayName: (name: string) => void;
+  resetPlayerData: () => void;
 }
 
 export const useWebSocket = (): UseWebSocketResult => {
+  const { playerId, displayName, setDisplayName, resetPlayerData } = usePlayerData();
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
-  const [playerId, setPlayerId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState>(createInitialGameState());
-  const isProcessingHistory = useRef<boolean>(true);
+  const [resetCountdown, setResetCountdown] = useState<number | null>(null);
+  const [playerDisplayNames, setPlayerDisplayNames] = useState<Record<string, string>>({});
   const socketRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<number | null>(null);
-
-  // Queue to store ticks that arrive while processing history
   const pendingTicksRef = useRef<GameTick[]>([]);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isProcessingHistory = useRef<boolean>(false);
 
   // Process game history from server
   const processGameHistory = useCallback((historyMsg: HistorySyncMessage) => {
@@ -142,7 +150,6 @@ export const useWebSocket = (): UseWebSocketResult => {
 
   // Function to connect to WebSocket server
   const connect = useCallback(() => {
-
     // Clear any existing reconnect timeout
     if (reconnectTimeoutRef.current !== null) {
       window.clearTimeout(reconnectTimeoutRef.current);
@@ -165,6 +172,17 @@ export const useWebSocket = (): UseWebSocketResult => {
     socket.onopen = () => {
       console.log('WebSocket connection established');
       setConnectionState('connected');
+
+      // Send our player ID to the server right after connection
+      // This ensures the server uses our persistent ID instead of generating a new one
+      if (playerId) {
+        const playerIdMessage = {
+          type: 'clientId',
+          playerId: playerId
+        };
+        socket.send(JSON.stringify(playerIdMessage));
+        console.log(`Sent our persistent player ID to server: ${playerId}`);
+      }
     };
 
     socket.onmessage = (event) => {
@@ -175,9 +193,11 @@ export const useWebSocket = (): UseWebSocketResult => {
         switch (message.type) {
           case 'connect':
             const connectMsg = message as ConnectMessage;
-            setPlayerId(connectMsg.playerId);
-            console.log(`Connected with player ID: ${connectMsg.playerId}`);
+            console.log(`Connected to server with our player ID: ${playerId}`);
             console.log(`Game session info: maxTicks=${connectMsg.maxTicks}, tickInterval=${connectMsg.tickInterval}ms`);
+
+            // Reset state when reconnecting (in case of new game session)
+            setGameState(createInitialGameState());
 
             // Update game state with session information
             setGameState(currentState => ({
@@ -185,6 +205,15 @@ export const useWebSocket = (): UseWebSocketResult => {
               maxTicks: connectMsg.maxTicks,
               tickInterval: connectMsg.tickInterval
             }));
+
+            // Clear any existing countdown
+            setResetCountdown(null);
+
+            // Send our display name if we have one
+            if (displayName) {
+              sendDisplayName(displayName);
+            }
+
             break;
 
           case 'tick':
@@ -238,6 +267,22 @@ export const useWebSocket = (): UseWebSocketResult => {
             }
             break;
 
+          case 'reset':
+            const resetMsg = message as ResetMessage;
+            console.log(`Received reset countdown: ${resetMsg.countdownSec} seconds remaining`);
+
+            // Update countdown state
+            setResetCountdown(resetMsg.countdownSec);
+            break;
+
+          case 'displayName':
+            const displayNameMsg = message as DisplayNameUpdateMessage;
+            console.log('Received display names update:', displayNameMsg.displayNames);
+
+            // Update state with display names
+            setPlayerDisplayNames(displayNameMsg.displayNames);
+            break;
+
           default:
             console.warn('Unhandled message type:', message.type);
         }
@@ -261,28 +306,45 @@ export const useWebSocket = (): UseWebSocketResult => {
     socket.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
-  }, [processGameHistory]);
+  }, [playerId, displayName]);
 
-  // Function to send player input to the server
+  // Function to send player input to server
   const sendInput = useCallback((input: Omit<PlayerInput, 'playerId'>) => {
-    if (socketRef.current && connectionState === 'connected' && playerId) {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       const inputMessage: InputMessage = {
         type: 'input',
         input: {
           ...input,
-          playerId
+          playerId: playerId
         }
       };
 
       socketRef.current.send(JSON.stringify(inputMessage));
     }
-  }, [connectionState, playerId]);
+  }, [playerId]);
 
-  // Connect on mount and reconnect if WS_URL changes
+  // Function to send display name update to server
+  const sendDisplayName = useCallback((name: string) => {
+    // Update local storage first
+    setDisplayName(name);
+
+    // Then send to server if connected
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      const displayNameMessage = {
+        type: 'displayName',
+        playerId: playerId,
+        displayName: name
+      };
+
+      socketRef.current.send(JSON.stringify(displayNameMessage));
+    }
+  }, [playerId, setDisplayName]);
+
+  // Automatically connect on component mount
   useEffect(() => {
     connect();
 
-    // Clean up on unmount
+    // Set up reconnection on disconnect
     return () => {
       if (socketRef.current) {
         socketRef.current.close();
@@ -297,7 +359,12 @@ export const useWebSocket = (): UseWebSocketResult => {
   return {
     connectionState,
     playerId,
+    displayName,
     gameState,
-    sendInput
+    resetCountdown,
+    playerDisplayNames,
+    sendInput,
+    setDisplayName: sendDisplayName,
+    resetPlayerData
   };
 };

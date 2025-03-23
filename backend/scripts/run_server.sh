@@ -15,11 +15,11 @@ function show_help() {
   echo "  -h, --help     Show this help message"
   echo ""
   echo "Presets:"
-  echo "  default        Default configuration (20Hz, ~30 mins)"
-  echo "  quick          Quick game (20Hz, 5 mins)"
-  echo "  slow           Slow game (10Hz, ~30 mins)"
-  echo "  fast           Fast game (20Hz, ~5 mins)"
-  echo "  test           Test game (20Hz, 1 min)"
+  echo "  default        Default configuration"
+  echo "  quick          Quick game"
+  echo "  slow           Slow game"
+  echo "  fast           Fast game"
+  echo "  test           Test game"
   echo ""
   echo "Examples:"
   echo "  $0                  # Default: 20Hz, ~30 mins"
@@ -36,21 +36,25 @@ fi
 # Set preset configurations
 case "$1" in
   "quick")
-    MAX_TICKS="6000"  # 5 minutes at 20Hz
-    echo "Setting up a quick game (20Hz, 5 mins)"
+    MAX_TICKS="2000"
+    RESET_TIMEOUT="10"
+    echo "Setting up a quick game"
     ;;
   "slow")
-    TICK_INTERVAL="100"  # 10Hz
-    echo "Setting up a slow game (10Hz, ~30 mins)"
+    MAX_TICKS="8000"
+    TICK_INTERVAL="100"
+    echo "Setting up a slow game"
     ;;
   "fast")
-    MAX_TICKS="1000"  # 1 minute at 20Hz
-    echo "Setting up a fast game (40Hz, ~30 mins)"
+    MAX_TICKS="1000"
+    RESET_TIMEOUT="5"
+    echo "Setting up a fast game"
     ;;
   "test")
-    MAX_TICKS="1200"  # 1 minute at 20Hz
+    MAX_TICKS="500"
     VERBOSE="-verbose"
-    echo "Setting up a test game (20Hz, 1 min)"
+    RESET_TIMEOUT="5"
+    echo "Setting up a test game"
     ;;
   "default" | "")
     echo "Setting up a default game (20Hz, ~30 mins)"
@@ -65,5 +69,5 @@ esac
 cd "$(dirname "$0")/.."
 echo "Building server..."
 go build -o server cmd/server.go
-echo "Starting server with: -addr $ADDR -tick-interval $TICK_INTERVAL -max-ticks $MAX_TICKS $VERBOSE"
-./server -addr $ADDR -tick-interval $TICK_INTERVAL -max-ticks $MAX_TICKS $VERBOSE
+echo "Starting server with: -addr $ADDR -tick-interval $TICK_INTERVAL -max-ticks $MAX_TICKS $VERBOSE -reset-timeout $RESET_TIMEOUT"
+./server -addr $ADDR -tick-interval $TICK_INTERVAL -max-ticks $MAX_TICKS $VERBOSE -reset-timeout $RESET_TIMEOUT

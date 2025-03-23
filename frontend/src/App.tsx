@@ -3,12 +3,13 @@ import { OrbitControls } from '@react-three/drei';
 import GameScene from './components/GameScene';
 import Controls from './components/Controls';
 import HUD from './components/HUD';
+import NameInputModal from './components/NameInputModal';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useRef } from 'react';
 import { Direction } from './types/shared';
 
 function App() {
-  const { connectionState, playerId, gameState, sendInput } = useWebSocket();
+  const { connectionState, playerId, displayName, gameState, sendInput, setDisplayName } = useWebSocket();
 
   // Reference to store the current direction for sending to the server
   const currentDirectionRef = useRef<Direction | null>(null);
@@ -25,6 +26,11 @@ function App() {
       direction,
       placeBlob: isPlacingBlob
     });
+  };
+
+  // Handler for name input submission
+  const handleNameSubmit = (name: string) => {
+    setDisplayName(name);
   };
 
   if (gameState === null) {
@@ -49,6 +55,9 @@ function App() {
     );
   }
 
+  // Determine if name modal should be shown (no displayName set)
+  const showNameModal = !displayName;
+
   return (
     <>
       <HUD gameState={gameState} />
@@ -56,7 +65,14 @@ function App() {
       <Canvas
         shadows
         camera={{ position: [15, 15, 15], fov: 50 }}
-        style={{ width: '100vw', height: '100vh', position: 'absolute', top: 0, left: 0 }}
+        style={{
+          width: '100vw',
+          height: '100vh',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          pointerEvents: showNameModal ? 'none' : 'auto' // Disable pointer events when modal is active
+        }}
       >
         <color attach="background" args={['#f0f0f0']} />
         <ambientLight intensity={0.5} />
@@ -72,7 +88,14 @@ function App() {
         <OrbitControls />
       </Canvas>
 
-      <Controls onControlsChange={handleControlsChange} />
+      {/* Only show controls if player has set a display name */}
+      {!showNameModal && <Controls onControlsChange={handleControlsChange} />}
+
+      {/* Show name input modal if no display name set */}
+      <NameInputModal
+        isVisible={showNameModal}
+        onNameSubmit={handleNameSubmit}
+      />
     </>
   );
 }
