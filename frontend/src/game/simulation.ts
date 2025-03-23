@@ -34,9 +34,13 @@ export interface GameState {
   bombs: Bomb[];
   explosions: Explosion[];
   tick: number;
+  maxTicks: number; // Maximum number of ticks in the game session
+  tickInterval: number; // Milliseconds between ticks
   gridSize: number;
   paintedCounts: Map<string, number>; // Count of cells painted by each player
   randomInitialized: boolean; // Track if random is initialized
+  gameOver: boolean; // Whether the game is over
+  winner: string | null; // ID of the winning player, null if game is not over or it's a tie
 }
 
 export interface PlayerState {
@@ -142,9 +146,13 @@ export function createInitialGameState(): GameState {
     bombs: [],
     explosions: [],
     tick: 0,
+    maxTicks: 0, // Maximum number of ticks in the game session
+    tickInterval: 0, // Milliseconds between ticks
     gridSize: GRID_SIZE,
     paintedCounts: new Map<string, number>(),
-    randomInitialized: false
+    randomInitialized: false,
+    gameOver: false, // Whether the game is over
+    winner: null // ID of the winning player, null if game is not over or it's a tie
   };
 }
 
@@ -404,9 +412,13 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
     bombs: [...currentState.bombs],
     explosions: [...currentState.explosions],
     tick: tick.tick,
+    maxTicks: currentState.maxTicks,
+    tickInterval: currentState.tickInterval,
     gridSize: currentState.gridSize,
     paintedCounts: new Map(currentState.paintedCounts),
-    randomInitialized: currentState.randomInitialized
+    randomInitialized: currentState.randomInitialized,
+    gameOver: currentState.gameOver,
+    winner: currentState.winner
   };
 
   // Ensure random is initialized

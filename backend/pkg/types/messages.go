@@ -35,8 +35,10 @@ const (
 
 // ConnectMessage is sent when a player connects to the game
 type ConnectMessage struct {
-	Type     MessageType `json:"type"`
-	PlayerID string      `json:"playerId"`
+	Type         MessageType `json:"type"`
+	PlayerID     string      `json:"playerId"`
+	MaxTicks     uint64      `json:"maxTicks"`     // Maximum number of ticks in the game session
+	TickInterval int         `json:"tickInterval"` // Milliseconds between ticks
 }
 
 // GetType returns the message type

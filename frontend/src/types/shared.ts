@@ -19,6 +19,8 @@ export type MessageType = 'connect' | 'input' | 'tick' | 'historySync';
 export interface ConnectMessage {
   type: 'connect';
   playerId: string;
+  maxTicks: number;
+  tickInterval: number;
 }
 
 export interface InputMessage {

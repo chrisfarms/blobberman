@@ -12,6 +12,8 @@ import (
 
 var addr = flag.String("addr", ":8080", "http service address")
 var verbose = flag.Bool("verbose", false, "enable verbose debug logging")
+var tickInterval = flag.Int("tick-interval", 50, "tick interval in milliseconds (default: 50ms, which is 20Hz)")
+var maxTicks = flag.Uint64("max-ticks", 100000, "maximum number of ticks in a game session (default: 100000 ticks, ~30 mins at 20Hz)")
 
 // debugLogger is a logger that only logs when verbose mode is enabled
 type debugLogger struct {
@@ -48,10 +50,18 @@ func main() {
 
 	if *verbose {
 		log.Printf("Verbose logging enabled")
+		log.Printf("Tick interval: %dms", *tickInterval)
+		log.Printf("Max ticks: %d", *maxTicks)
+	}
+
+	// Create options for the hub
+	hubOptions := websocket.HubOptions{
+		TickIntervalMs: *tickInterval,
+		MaxHistorySize: *maxTicks,
 	}
 
 	// Create a new hub with debug logger
-	hub := websocket.NewHubWithDebug(debugLog.Printf)
+	hub := websocket.NewHubWithOptions(hubOptions, debugLog.Printf)
 	go hub.Run()
 
 	// Setup WebSocket handler

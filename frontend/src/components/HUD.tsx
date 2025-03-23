@@ -35,7 +35,19 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
 
   // Calculate total painted tiles
   const totalPaintedTiles = Array.from(gameState.paintedCounts.values()).reduce((sum, count) => sum + count, 0);
-  console.log(gameState);
+
+  // Calculate remaining time
+  const calculateRemainingTime = () => {
+    if (!gameState.maxTicks || !gameState.tickInterval) return 'N/A';
+
+    const remainingTicks = Math.max(0, gameState.maxTicks - gameState.tick);
+    const remainingMs = remainingTicks * gameState.tickInterval;
+
+    // Format as mm:ss
+    const minutes = Math.floor(remainingMs / 60000);
+    const seconds = Math.floor((remainingMs % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className={styles.hudContainer}>
@@ -106,8 +118,8 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
       {/* Game info */}
       <div className={styles.gameInfo}>
         <div className={styles.detailRow}>
-          <span>Tick:</span>
-          <span>{gameState.tick}</span>
+          <span>Time Left:</span>
+          <span>{calculateRemainingTime()}</span>
         </div>
         <div className={styles.detailRow}>
           <span>Active Bombs:</span>
@@ -122,6 +134,45 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
           <span>{gameState.players.size}</span>
         </div>
       </div>
+
+      {/* Game over message */}
+      {gameState.gameOver && (
+        <div className={styles.gameOverOverlay}>
+          <div className={styles.gameOverMessage}>
+            <h1>Game Over!</h1>
+            {gameState.winner ? (
+              <>
+                <h2>Winner: {gameState.winner === playerId ? 'You' : `Player ${gameState.winner.substring(0, 6)}`}</h2>
+                {gameState.players.get(gameState.winner) && (
+                  <div
+                    className={styles.winnerColor}
+                    style={{ backgroundColor: gameState.players.get(gameState.winner)?.color }}
+                  />
+                )}
+              </>
+            ) : (
+              <h2>It's a tie!</h2>
+            )}
+            <div className={styles.finalScoreboard}>
+              <h3>Final Scores</h3>
+              <ul>
+                {playerScores.map((score) => (
+                  <li key={score.playerId}>
+                    <div
+                      className={styles.playerColor}
+                      style={{ backgroundColor: score.color }}
+                    />
+                    <span>
+                      {score.playerId === playerId ? 'You' : `Player ${score.playerId.substring(0, 6)}`}
+                    </span>
+                    <span>{score.count} tiles</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -11,7 +11,8 @@ import (
 )
 
 // Maximum number of ticks to keep in history
-const MAX_HISTORY_SIZE = 100_000 // about 30mins of history
+const DEFAULT_MAX_HISTORY_SIZE = 100_000 // about 30mins of history
+const DEFAULT_TICK_INTERVAL_MS = 50      // 50ms per tick (20Hz)
 
 // DebugLoggerFunc is a function type for debug logging
 type DebugLoggerFunc func(format string, args ...interface{})
@@ -31,6 +32,12 @@ type Client struct {
 	SendChan chan ClientMessage
 	Mutex    sync.Mutex
 	debugLog DebugLoggerFunc
+}
+
+// HubOptions contains configurable options for the Hub
+type HubOptions struct {
+	TickIntervalMs int
+	MaxHistorySize uint64
 }
 
 // Hub manages WebSocket client connections and game state
@@ -61,34 +68,53 @@ type Hub struct {
 
 	// Debug logger function
 	debugLog common.DebugLoggerFunc
+
+	// Tick interval in milliseconds
+	tickInterval int
+
+	// Maximum number of ticks to keep in history
+	maxHistorySize uint64
 }
 
-// NewHub creates a new Hub instance with default no-op logger
+// NewHub creates a new Hub instance with default no-op logger and default options
 func NewHub() *Hub {
-	return NewHubWithDebug(common.NoopDebugLogger)
+	return NewHubWithOptions(HubOptions{
+		TickIntervalMs: DEFAULT_TICK_INTERVAL_MS,
+		MaxHistorySize: DEFAULT_MAX_HISTORY_SIZE,
+	}, common.NoopDebugLogger)
 }
 
-// NewHubWithDebug creates a new Hub instance with the provided debug logger
+// NewHubWithDebug creates a new Hub instance with the provided debug logger and default options
 func NewHubWithDebug(debugLog common.DebugLoggerFunc) *Hub {
+	return NewHubWithOptions(HubOptions{
+		TickIntervalMs: DEFAULT_TICK_INTERVAL_MS,
+		MaxHistorySize: DEFAULT_MAX_HISTORY_SIZE,
+	}, debugLog)
+}
+
+// NewHubWithOptions creates a new Hub instance with the provided options and debug logger
+func NewHubWithOptions(options HubOptions, debugLog common.DebugLoggerFunc) *Hub {
 	return &Hub{
-		Clients:       make(map[*common.Client]bool),
-		Register:      make(chan *common.Client),
-		Unregister:    make(chan *common.Client),
-		Broadcast:     make(chan common.ClientMessage, 1),
-		CurrentTick:   0,
-		CurrentInputs: make([]types.PlayerInput, 0),
-		TickHistory:   make([]types.GameTick, 0, MAX_HISTORY_SIZE),
-		debugLog:      debugLog,
+		Clients:        make(map[*common.Client]bool),
+		Register:       make(chan *common.Client),
+		Unregister:     make(chan *common.Client),
+		Broadcast:      make(chan common.ClientMessage, 1),
+		CurrentTick:    0,
+		CurrentInputs:  make([]types.PlayerInput, 0),
+		TickHistory:    make([]types.GameTick, 0, options.MaxHistorySize),
+		debugLog:       debugLog,
+		tickInterval:   options.TickIntervalMs,
+		maxHistorySize: options.MaxHistorySize,
 	}
 }
 
 // Run starts the hub, processing client connections and game ticks
 func (h *Hub) Run() {
-	// Start the game tick timer (20Hz = 50ms)
-	ticker := time.NewTicker(50 * time.Millisecond)
+	// Start the game tick timer with the configured interval
+	ticker := time.NewTicker(time.Duration(h.tickInterval) * time.Millisecond)
 	defer ticker.Stop()
 
-	h.debugLog("Hub started, running at 20Hz (50ms per tick)")
+	h.debugLog("Hub started, running at %dms per tick", h.tickInterval)
 
 	for {
 		select {
@@ -97,6 +123,21 @@ func (h *Hub) Run() {
 			clientCount := len(h.Clients)
 			log.Printf("Client connected: %s (total: %d)", client.ID, clientCount)
 			h.debugLog("Client %s connected from, total clients: %d", client.ID, clientCount)
+
+			// Send connection message with game session information
+			connectMsg := types.ConnectMessage{
+				Type:         types.MessageTypeConnect,
+				PlayerID:     client.ID,
+				MaxTicks:     h.maxHistorySize,
+				TickInterval: h.tickInterval,
+			}
+
+			select {
+			case client.SendChan <- connectMsg:
+				h.debugLog("Connect message sent to client %s", client.ID)
+			default:
+				h.debugLog("Failed to send connect message to client %s", client.ID)
+			}
 
 			// Send history to the new client if we have any
 			h.sendHistoryToClient(client)
@@ -188,7 +229,7 @@ func (h *Hub) processGameTick() {
 	}
 
 	// Add the current tick to history
-	if len(h.TickHistory) >= MAX_HISTORY_SIZE {
+	if uint64(len(h.TickHistory)) >= h.maxHistorySize {
 		// If history is full, remove the oldest tick
 		h.TickHistory = h.TickHistory[1:]
 	}
