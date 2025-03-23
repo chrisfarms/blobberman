@@ -2,6 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import GameScene from './components/GameScene';
 import Controls from './components/Controls';
+import HUD from './components/HUD';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useRef } from 'react';
 import { Direction } from './types/shared';
@@ -27,18 +28,35 @@ function App() {
   };
 
   if (gameState === null) {
-    return <div>Loading...</div>;
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f0f0f0',
+        flexDirection: 'column',
+        fontFamily: 'Arial, sans-serif',
+        color: '#333'
+      }}>
+        <h2>Loading game...</h2>
+        <p>Connecting to server: {connectionState}</p>
+      </div>
+    );
   }
 
   return (
     <>
-      <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10 }}>
-        Status: {connectionState} {playerId && `(ID: ${playerId.substring(0, 6)})`}
-      </div>
+      <HUD gameState={gameState} />
 
       <Canvas
         shadows
         camera={{ position: [15, 15, 15], fov: 50 }}
+        style={{ width: '100vw', height: '100vh', position: 'absolute', top: 0, left: 0 }}
       >
         <color attach="background" args={['#f0f0f0']} />
         <ambientLight intensity={0.5} />

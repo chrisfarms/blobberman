@@ -131,31 +131,6 @@ const GameScene = ({ gameState }: GameSceneProps) => {
           </mesh>
         </group>
       ))}
-
-      {/* Display scoreboard */}
-      <group position={[-gameState.gridSize/2 + 1, 1, -gameState.gridSize/2 + 1]}>
-        {Array.from(gameState.paintedCounts.entries())
-          .sort((a, b) => b[1] - a[1]) // Sort by painted count descending
-          .slice(0, 5) // Show top 5 players
-          .map(([playerId, count], index) => {
-            const player = gameState.players.get(playerId);
-            if (!player) return null;
-
-            return (
-              <group key={`score-${playerId}`} position={[0, -index * 0.5, 0]}>
-                <mesh>
-                  <boxGeometry args={[0.4, 0.4, 0.4]} />
-                  <meshStandardMaterial color={player.color} />
-                </mesh>
-                <mesh position={[1, 0, 0]}>
-                  <boxGeometry args={[count/5, 0.2, 0.2]} />
-                  <meshStandardMaterial color={player.color} />
-                </mesh>
-              </group>
-            );
-          })
-        }
-      </group>
     </>
   );
 };

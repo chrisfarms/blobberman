@@ -299,11 +299,11 @@ function paintExplosionCells(state: GameState, explosion: Explosion): void {
       }
 
       // Paint the cell
-      cell.paintedBy = playerId;
-
-      // Update painted count
-      const playerCount = paintedCounts.get(playerId) || 0;
-      paintedCounts.set(playerId, playerCount + 1);
+      if (cell.paintedBy !== playerId) {
+        cell.paintedBy = playerId;
+        const playerCount = paintedCounts.get(playerId) || 0;
+        paintedCounts.set(playerId, playerCount + 1);
+      }
     }
   }
 
@@ -320,11 +320,13 @@ function paintExplosionCells(state: GameState, explosion: Explosion): void {
         }
 
         // Paint the cell
-        cell.paintedBy = playerId;
+        if (cell.paintedBy !== playerId) {
+            cell.paintedBy = playerId;
 
-        // Update painted count
-        const playerCount = paintedCounts.get(playerId) || 0;
-        paintedCounts.set(playerId, playerCount + 1);
+            // Update painted count
+            const playerCount = paintedCounts.get(playerId) || 0;
+            paintedCounts.set(playerId, playerCount + 1);
+        }
       }
     }
   }
