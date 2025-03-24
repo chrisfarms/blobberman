@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import nipplejs, { JoystickManager, JoystickOutputData, EventData, Direction as JoystickDirection } from 'nipplejs';
+import nipplejs, { JoystickManager, JoystickOutputData, EventData } from 'nipplejs';
 import { Direction } from '@/types/shared';
+import styles from './Controls.module.css';
 
 interface ControlsProps {
   onControlsChange: (direction: Direction | null, isPlacingBlob: boolean) => void;
@@ -11,6 +12,18 @@ const Controls = ({ onControlsChange }: ControlsProps) => {
   const joystickManagerRef = useRef<JoystickManager | null>(null);
   const [currentDirection, setCurrentDirection] = useState<Direction | null>(null);
   const [isPlacingBlob, setIsPlacingBlob] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect if device is mobile/touch
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.matchMedia("(max-width: 768px)").matches);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Send input changes to parent
   useEffect(() => {
@@ -20,13 +33,15 @@ const Controls = ({ onControlsChange }: ControlsProps) => {
   useEffect(() => {
     if (!joystickContainerRef.current) return;
 
-    // Initialize joystick
+    // Initialize joystick with different positions for mobile vs desktop
     joystickManagerRef.current = nipplejs.create({
       zone: joystickContainerRef.current,
       mode: 'static',
-      position: { left: '50%', bottom: '80px' },
-      color: 'rgba(255, 100, 200, 0.5)',
-      size: 120,
+      position: isMobile
+        ? { left: '100px', bottom: '120px' }
+        : { left: '50%', bottom: '80px' },
+      color: 'rgba(255, 100, 200, 0.6)',
+      size: isMobile ? 100 : 120,
     });
 
     // Handle joystick movement
@@ -46,7 +61,7 @@ const Controls = ({ onControlsChange }: ControlsProps) => {
     return () => {
       joystickManagerRef.current?.destroy();
     };
-  }, []);
+  }, [isMobile]);
 
   // Handle keyboard input
   useEffect(() => {
@@ -90,47 +105,24 @@ const Controls = ({ onControlsChange }: ControlsProps) => {
 
   return (
     <>
+      {/* Joystick container */}
       <div
         ref={joystickContainerRef}
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          width: '100%',
-          height: '200px',
-          pointerEvents: 'auto',
-          zIndex: 100,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'flex-end'
-        }}
+        className={styles.joystickContainer}
       />
 
       {/* Blob button for touch devices */}
       <div
-        style={{
-          position: 'absolute',
-          bottom: '80px',
-          right: '80px',
-          width: '80px',
-          height: '80px',
-          borderRadius: '50%',
-          backgroundColor: isPlacingBlob ? 'rgba(255, 0, 0, 0.7)' : 'rgba(255, 100, 100, 0.5)',
-          zIndex: 100,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          userSelect: 'none',
-          cursor: 'pointer',
-          touchAction: 'none'
-        }}
+        className={`${styles.bombButton} ${isPlacingBlob ? styles.active : ''}`}
         onTouchStart={() => setIsPlacingBlob(true)}
         onTouchEnd={() => setIsPlacingBlob(false)}
         onMouseDown={() => setIsPlacingBlob(true)}
         onMouseUp={() => setIsPlacingBlob(false)}
         onMouseLeave={() => setIsPlacingBlob(false)}
       >
-        BOMB
+        <div className={styles.bombButtonInner}>
+          BOMB
+        </div>
       </div>
     </>
   );

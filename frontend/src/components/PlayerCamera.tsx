@@ -9,39 +9,30 @@ interface PlayerCameraProps {
   explosions: Explosion[];
 }
 
-// Improved lerp function that takes into account deltaTime
-const lerpVector = (current: Vector3, target: Vector3, alpha: number, deltaTime: number): Vector3 => {
+const lerpVector = (current: number, target: number, alpha: number, deltaTime: number): number => {
   // Calculate smooth factor based on deltaTime (60fps is our reference)
   const smoothFactor = 1.0 - Math.pow(1.0 - alpha, deltaTime * 60);
-
-  return current.clone().lerp(target, smoothFactor);
+  return current + (target - current) * smoothFactor;
 };
 
 export default function PlayerCamera({ player, gridSize, explosions }: PlayerCameraProps) {
   const { camera } = useThree();
-  const targetPosition = useRef(new Vector3(0, 30, 10)); // Increased height and distance
-  const currentLookAt = useRef(new Vector3(0, 0, 0));
-  const targetLookAt = useRef(new Vector3(0, 0, 0));
 
   // Lower alpha for smoother transitions, higher for more responsive
-  const positionAlpha = 0.05;
-  const lookAtAlpha = 0.1;
+  const positionAlpha = 0.15;
 
   const shakeRef = useRef({ intensity: 0, decay: 0.9 });
   const lastExplosionsLength = useRef(0);
 
   // Calculate height and distance based on grid size
-  const cameraHeight = Math.max(25, gridSize * 0.75);
+  const cameraHeight = Math.max(10, gridSize * 0.25);
   const cameraDistance = Math.max(8, gridSize * 0.25);
 
   useEffect(() => {
     // Set initial camera position to be above and slightly behind the camera target
     if (camera) {
-      camera.position.set(0, cameraHeight, cameraDistance);
+      camera.position.set(0, 20, 10);
       camera.lookAt(0, 0, 0);
-
-      // Initialize our current look-at position
-      currentLookAt.current.set(0, 0, 0);
     }
   }, [camera, cameraHeight, cameraDistance]);
 
@@ -67,46 +58,27 @@ export default function PlayerCamera({ player, gridSize, explosions }: PlayerCam
     shake.intensity *= Math.pow(shake.decay, deltaTime * 60);
     if (shake.intensity < 0.001) shake.intensity = 0;
 
-    // Calculate world position for the player
-    const worldX = player.x;
-    const worldZ = player.y; // Y coordinate in game state is Z in 3D space
-
-    // Update target positions for the camera
-    const cameraTargetX = worldX;
-    const cameraTargetY = cameraHeight; // Height above ground
-    const cameraTargetZ = worldZ + cameraDistance; // Distance behind player
-
-    // Set the target position for the camera
-    targetPosition.current.set(cameraTargetX, cameraTargetY, cameraTargetZ);
-
-    // Update the look-at target
-    targetLookAt.current.set(worldX, 0, worldZ);
-
     // Smoothly interpolate the camera position using lerp and deltaTime
-    const newPosition = lerpVector(
-      new Vector3(camera.position.x, camera.position.y, camera.position.z),
-      targetPosition.current,
+    camera.position.x = lerpVector(
+      camera.position.x,
+      player.x + shakeOffset.x,
       positionAlpha,
       deltaTime
     );
-
-    // Smoothly interpolate the look-at position using lerp and deltaTime
-    currentLookAt.current = lerpVector(
-      currentLookAt.current,
-      targetLookAt.current,
-      lookAtAlpha,
+    camera.position.z = lerpVector(
+      camera.position.z,
+      player.y + 10 + shakeOffset.z,
+      positionAlpha,
       deltaTime
     );
-
-    // Update camera position with the interpolated position and shake
-    camera.position.copy(newPosition).add(shakeOffset);
+    camera.position.y = 20 + shakeOffset.y;
 
     // Look at the interpolated target position with a small shake offset
-    camera.lookAt(
-      currentLookAt.current.x + shakeOffset.x * 0.5,
-      currentLookAt.current.y + shakeOffset.y * 0.5,
-      currentLookAt.current.z + shakeOffset.z * 0.5
-    );
+    // camera.lookAt(
+    //   1,
+    //   1,
+    //   1,
+    // );
   });
 
   return null; // This component doesn't render anything

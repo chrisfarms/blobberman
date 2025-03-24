@@ -134,32 +134,28 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
 
   return (
     <div className={styles.hudContainer}>
-      {/* Connection status */}
-      <div className={styles.connectionStatus}>
-        <div className={`${styles.statusIndicator} ${styles[connectionState]}`}></div>
-        <span>{connectionState}</span>
-        <div className={styles.playerInfo}>
-          {/* Only show player name edit form if there's a display name and we're in edit mode */}
-          {displayName && isEditingName ? (
-            <form onSubmit={handleNameSubmit} className={styles.nameEditForm}>
-              <input
-                type="text"
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                placeholder="Enter your name"
-                maxLength={15}
-                className={styles.nameInput}
-                autoFocus
-              />
-              <button type="submit" className={styles.saveButton}>Save</button>
-            </form>
-          ) : displayName ? (
-            <div className={styles.playerName} onClick={() => setIsEditingName(true)}>
-              {displayName} ✏️
-            </div>
-          ) : null}
-          {displayName && <button onClick={handleResetData} className={styles.resetButton}>Reset Player Data</button>}
-        </div>
+      {/* Player Name and Reset button (moved from connection status) */}
+      <div className={styles.playerInfoDisplay}>
+        {/* Only show player name edit form if there's a display name and we're in edit mode */}
+        {displayName && isEditingName ? (
+          <form onSubmit={handleNameSubmit} className={styles.nameEditForm}>
+            <input
+              type="text"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder="Enter your name"
+              maxLength={15}
+              className={styles.nameInput}
+              autoFocus
+            />
+            <button type="submit" className={styles.saveButton}>Save</button>
+          </form>
+        ) : displayName ? (
+          <div className={styles.playerName} onClick={() => setIsEditingName(true)}>
+            {displayName} ✏️
+          </div>
+        ) : null}
+        {displayName && <button onClick={handleResetData} className={styles.resetButton}>Reset Player Data</button>}
       </div>
 
       {/* Scoreboard */}

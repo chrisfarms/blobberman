@@ -55,7 +55,7 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
   const bounce = Math.sin(tick * 0.1) * 0.05;
 
   // Use useFrame to update position with lerp
-  useFrame((_, deltaTime) => {
+  useFrame(({ camera }, deltaTime) => {
     const group = groupRef.current;
     if (!group) return;
     group.position.x = lerpVector(

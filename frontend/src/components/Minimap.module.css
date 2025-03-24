@@ -1,0 +1,30 @@
+.minimap {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background-color: transparent;
+  border-radius: 6px;
+  padding: 5px;
+  z-index: 100;
+}
+
+.minimapCanvas {
+  display: block;
+  width: 150px;
+  height: 150px;
+  border-radius: 3px;
+}
+
+/* Make minimap smaller on small screens */
+@media (max-width: 768px) {
+  .minimap {
+    display: none;
+    top: 10px;
+    left: 10px;
+  }
+
+  .minimapCanvas {
+    width: 100px;
+    height: 100px;
+  }
+}

@@ -2,6 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import GameScene from './components/GameScene';
 import Controls from './components/Controls';
 import HUD from './components/HUD';
+import Minimap from './components/Minimap';
 import NameInputModal from './components/NameInputModal';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useRef } from 'react';
@@ -81,13 +82,13 @@ function App() {
           pointerEvents: showNameModal ? 'none' : 'auto' // Disable pointer events when modal is active
         }}
       >
-        <color attach="background" args={['#f0f0f0']} />
-        <ambientLight intensity={0.6} />
+        <color attach="background" args={['#e6e6e6']} />
+        <ambientLight intensity={0.5} />
 
         {/* Main directional light for general illumination */}
         <directionalLight
           position={[20, 30, 20]}
-          intensity={0.8}
+          intensity={0.7}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
@@ -100,7 +101,7 @@ function App() {
         {/* Secondary light from the opposite direction to reduce harsh shadows */}
         <directionalLight
           position={[-20, 20, -20]}
-          intensity={0.4}
+          intensity={0.3}
           castShadow
           shadow-mapSize-width={1024}
           shadow-mapSize-height={1024}
@@ -110,10 +111,13 @@ function App() {
           shadow-camera-bottom={-25}
         />
 
-        {/* Add a soft hemisphere light for ambient fill */}
+        {/* Add a soft hemisphere light with more contrast */}
         <hemisphereLight
-          args={['#efefff', '#dddddd', 0.6]}
+          args={['#e0e0ff', '#c0c0c0', 0.5]}
         />
+
+        {/* Add a subtle fog effect for depth */}
+        <fog attach="fog" args={['#d0d0d0', 40, 90]} />
 
         <GameScene gameState={gameState} />
         {currentPlayer && (
@@ -127,6 +131,9 @@ function App() {
 
       {/* Only show controls if player has set a display name */}
       {!showNameModal && <Controls onControlsChange={handleControlsChange} />}
+
+      {/* Show the minimap when player is in game */}
+      {!showNameModal && <Minimap gameState={gameState} currentPlayerId={playerId} />}
 
       {/* Show name input modal if no display name set */}
       <NameInputModal
