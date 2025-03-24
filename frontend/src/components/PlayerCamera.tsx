@@ -73,12 +73,6 @@ export default function PlayerCamera({ player, gridSize, explosions }: PlayerCam
     );
     camera.position.y = 20 + shakeOffset.y;
 
-    // Look at the interpolated target position with a small shake offset
-    // camera.lookAt(
-    //   1,
-    //   1,
-    //   1,
-    // );
   });
 
   return null; // This component doesn't render anything

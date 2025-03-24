@@ -1,4 +1,5 @@
 import { Instance, Instances, RoundedBox as DreiRoundedBox } from '@react-three/drei';
+import { useMemo } from 'react';
 
 // Properties for our RoundedBox wrapper component
 export type CustomRoundedBoxProps = {
@@ -133,19 +134,36 @@ export interface CustomRoundedBoxInstanceProps {
   rotation?: [number, number, number];
   scale?: number | [number, number, number];
   color?: string;
+  height?: number;
 }
 
 export const CustomRoundedBoxInstance: React.FC<CustomRoundedBoxInstanceProps> = ({
   position,
   rotation,
   scale = 1,
-  color
+  color,
+  height
 }) => {
+  // Calculate actual scale considering height
+  const actualScale = useMemo(() => {
+    if (height !== undefined) {
+      // If height is specified, create a scale that adjusts only the Y dimension
+      if (typeof scale === 'number') {
+        return [scale, height, scale] as [number, number, number];
+      } else {
+        // Preserve x and z scale, adjust y scale based on height
+        return [scale[0], height, scale[2]] as [number, number, number];
+      }
+    }
+    // Otherwise use the provided scale as is
+    return scale;
+  }, [scale, height]);
+
   return (
     <Instance
       position={position}
       rotation={rotation}
-      scale={scale}
+      scale={actualScale}
       color={color}
     />
   );

@@ -1,4 +1,4 @@
-import { GameTick, PlayerInput, Direction } from '@/types/shared';
+import { GameTick, Direction } from '@/types/shared';
 import { initializeRandom, randomChance, randomInt, willSpawnPowerUpAtPosition, getPowerUpTypeAtPosition, random } from '@/utils/random';
 
 // Grid cell contents
@@ -486,53 +486,6 @@ function paintExplosionCells(state: GameState, explosion: Explosion): void {
   }
 }
 
-// Check if a player is hit by an explosion
-function checkPlayerHit(state: GameState): void {
-  for (const explosion of state.explosions) {
-    // Skip explosions that aren't in their first frame
-    if (state.tick - explosion.startedAt > 0) continue;
-
-    // Check each arm of the explosion
-    const hitPositions = [
-      { x: explosion.x, y: explosion.y }, // Center of explosion
-      ...explosion.arms.map(arm => ({ x: arm.x, y: arm.y }))
-    ];
-
-    for (const [playerId, player] of state.players.entries()) {
-      // Skip the player who created this explosion
-      if (playerId === explosion.playerId) continue;
-
-      // Convert player position to cell coordinates
-      const playerCellX = Math.floor(player.x + state.gridSize / 2);
-      const playerCellY = Math.floor(player.y + state.gridSize / 2);
-
-      for (const position of hitPositions) {
-        const expCellX = Math.floor(position.x + state.gridSize / 2);
-        const expCellY = Math.floor(position.y + state.gridSize / 2);
-
-        if (playerCellX === expCellX && playerCellY === expCellY) {
-          // Player was hit by an explosion!
-
-          // Check if player has a shield
-          if (player.hasShield) {
-            // Shield absorbs the hit but is consumed
-            player.hasShield = false;
-            player.shieldEndTick = 0;
-
-            // Remove the SplatShield power-up
-            player.powerUps = player.powerUps.filter(p => p !== PowerUpType.SplatShield);
-          } else {
-            // Reset all cells painted by this player
-            resetPlayerPaintedAreas(state, playerId);
-          }
-
-          break;
-        }
-      }
-    }
-  }
-}
-
 // Reset all cells painted by a player
 function resetPlayerPaintedAreas(state: GameState, playerId: string): void {
   const { grid, paintedCounts } = state;
@@ -818,6 +771,8 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
         case 'down':
           newY += moveAmount;
           break;
+      }
+      switch (input.direction) {
         case 'left':
           newX -= moveAmount;
           break;
@@ -1027,115 +982,5 @@ function applyPowerUp(state: GameState, player: PlayerState, powerUpType: PowerU
       // Allow player to jump over one tile
       player.canJump = true;
       break;
-  }
-}
-
-// Move a player based on their current input
-function movePlayer(state: GameState, playerId: string, input: PlayerInput): void {
-  const player = state.players.get(playerId);
-  if (!player) return;
-
-  // Get current player position
-  let { x, y } = player;
-
-  // Base movement speed
-  const baseSpeed = 0.15;
-
-  // Apply speed multiplier if player has speed boost
-  const speedMultiplier = player.speedMultiplier || 1.0;
-  const moveSpeed = baseSpeed * speedMultiplier;
-
-  // Check if player still has their power-ups
-  checkPowerUpExpiration(state, player);
-
-  // Handle movement direction
-  if (input.direction === 'up') {
-    // Try to move up
-    const newY = y - moveSpeed;
-    // Check if we're in jump mode
-    if (player.canJump && !canMoveTo(state.grid, x, newY)) {
-      // Try to jump over one tile
-      const jumpDistance = moveSpeed * 2;
-      if (canMoveTo(state.grid, x, y - jumpDistance)) {
-        y -= jumpDistance;
-        player.canJump = false; // Use up the jump power-up
-      }
-    } else if (canMoveTo(state.grid, x, newY)) {
-      y = newY;
-    }
-    player.lastDirection = 'up';
-  } else if (input.direction === 'down') {
-    // Try to move down
-    const newY = y + moveSpeed;
-    // Check if we're in jump mode
-    if (player.canJump && !canMoveTo(state.grid, x, newY)) {
-      // Try to jump over one tile
-      const jumpDistance = moveSpeed * 2;
-      if (canMoveTo(state.grid, x, y + jumpDistance)) {
-        y += jumpDistance;
-        player.canJump = false; // Use up the jump power-up
-      }
-    } else if (canMoveTo(state.grid, x, newY)) {
-      y = newY;
-    }
-    player.lastDirection = 'down';
-  } else if (input.direction === 'left') {
-    // Try to move left
-    const newX = x - moveSpeed;
-    // Check if we're in jump mode
-    if (player.canJump && !canMoveTo(state.grid, newX, y)) {
-      // Try to jump over one tile
-      const jumpDistance = moveSpeed * 2;
-      if (canMoveTo(state.grid, x - jumpDistance, y)) {
-        x -= jumpDistance;
-        player.canJump = false; // Use up the jump power-up
-      }
-    } else if (canMoveTo(state.grid, newX, y)) {
-      x = newX;
-    }
-    player.lastDirection = 'left';
-  } else if (input.direction === 'right') {
-    // Try to move right
-    const newX = x + moveSpeed;
-    // Check if we're in jump mode
-    if (player.canJump && !canMoveTo(state.grid, newX, y)) {
-      // Try to jump over one tile
-      const jumpDistance = moveSpeed * 2;
-      if (canMoveTo(state.grid, x + jumpDistance, y)) {
-        x += jumpDistance;
-        player.canJump = false; // Use up the jump power-up
-      }
-    } else if (canMoveTo(state.grid, newX, y)) {
-      x = newX;
-    }
-    player.lastDirection = 'right';
-  }
-
-  // Update player position
-  player.x = x;
-  player.y = y;
-
-  // Place a bomb if the bomb button is pressed
-  // This is handled by the main input processing function
-}
-
-// Check and expire temporary power-ups
-function checkPowerUpExpiration(state: GameState, player: PlayerState): void {
-  const { tick } = state;
-
-  // Check speed boost expiration
-  if (player.speedMultiplier > 1.0 && tick >= player.speedBoostEndTick) {
-    player.speedMultiplier = 1.0;
-
-    // Remove the power-up from the player's collection
-    player.powerUps = player.powerUps.filter(p => p !== PowerUpType.SpeedBoost);
-  }
-
-  // Check shield expiration
-  if (player.hasShield && tick >= player.shieldEndTick) {
-    player.hasShield = false;
-
-    // Remove the power-up from the player's collection
-    player.powerUps = player.powerUps.filter(p => p !== PowerUpType.SplatShield);
   }
 }

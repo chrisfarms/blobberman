@@ -338,18 +338,23 @@ const PaintExplosion = ({ explosion, playerColor, tick }: PaintExplosionProps) =
 interface WallDestructionProps {
   x: number;
   y: number;
+  gridX: number;
+  gridY: number;
   tick: number;
   startTick: number;
   color: string;
 }
 
-const WallDestruction = ({ x, y, tick, startTick, color }: WallDestructionProps) => {
+const WallDestruction = ({ x, y, gridX, gridY, tick, startTick, color }: WallDestructionProps) => {
   // Animation progress based on time since wall was destroyed
   const progress = Math.min(1, (tick - startTick) / 15);
   const duration = 15; // Animation lasts for 15 ticks
 
   // If animation is complete, don't render anything
   if (progress >= 1) return null;
+
+  // Get the original wall height
+  const originalHeight = getBreakableWallHeight(gridX, gridY);
 
   // Generate debris fragments
   const fragments = useMemo(() => {
@@ -358,7 +363,8 @@ const WallDestruction = ({ x, y, tick, startTick, color }: WallDestructionProps)
     for (let i = 0; i < count; i++) {
       // Random starting position within the wall bounds
       const offsetX = (Math.random() - 0.5) * 0.5;
-      const offsetY = (Math.random() - 0.5) * 0.5;
+      // Adjust Y offset based on the original wall height
+      const offsetY = (Math.random() - 0.5) * originalHeight;
       const offsetZ = (Math.random() - 0.5) * 0.5;
 
       // Random ending position (flying outward)
@@ -381,10 +387,13 @@ const WallDestruction = ({ x, y, tick, startTick, color }: WallDestructionProps)
       });
     }
     return pieces;
-  }, []);
+  }, [originalHeight]);
+
+  // Update the starting position to account for the original wall height
+  const centerY = originalHeight / 2;
 
   return (
-    <group position={[x, 0.4, y]}>
+    <group position={[x, centerY, y]}>
       {/* Render wall fragments */}
       {fragments.map((fragment, i) => {
         // Calculate current position based on animation progress using easing
@@ -425,16 +434,31 @@ const WallDestruction = ({ x, y, tick, startTick, color }: WallDestructionProps)
   );
 };
 
+// Function to deterministically calculate height variation based on x,y coordinates
+// This ensures all clients see the same height variations
+const getBreakableWallHeight = (x: number, y: number): number => {
+  // Base height for breakable walls
+  const baseHeight = 0.8;
+
+  // Use sine functions on the coordinates for a wave-like pattern
+  // Using prime numbers as multipliers helps avoid obvious patterns
+  const variation = Math.sin(x * 0.7 + y * 1.3) * 0.05 +
+                    Math.sin(x * 1.1 - y * 0.9) * 0.04;
+
+  // Return the base height plus a small variation (±10%)
+  return baseHeight + variation;
+};
+
 const GameScene = ({ gameState }: GameSceneProps) => {
   const gridRef = useRef<GridHelper>(null);
 
   // Track wall destruction animations
-  const [destroyedWalls, setDestroyedWalls] = useState<{x: number, y: number, tick: number}[]>([]);
+  const [destroyedWalls, setDestroyedWalls] = useState<{x: number, y: number, gridX: number, gridY: number, tick: number}[]>([]);
   const lastGridRef = useRef<GridCell[][]>(gameState.grid);
 
   // Check for newly destroyed walls by comparing current grid with previous grid
   useEffect(() => {
-    const newDestroyedWalls: {x: number, y: number, tick: number}[] = [];
+    const newDestroyedWalls: {x: number, y: number, gridX: number, gridY: number, tick: number}[] = [];
 
     // Skip initial render
     if (lastGridRef.current !== gameState.grid) {
@@ -451,9 +475,15 @@ const GameScene = ({ gameState }: GameSceneProps) => {
           // Check if a breakable wall was destroyed
           if (prevCell.content === 'breakableWall' && cell.content === 'empty') {
             // This wall was just destroyed
+            // Calculate world position
+            const worldX = x - gameState.gridSize / 2 + 0.5;
+            const worldY = y - gameState.gridSize / 2 + 0.5;
+
             newDestroyedWalls.push({
-              x: x - gameState.gridSize / 2 + 0.5,
-              y: y - gameState.gridSize / 2 + 0.5,
+              x: worldX, // World position
+              y: worldY, // World position
+              gridX: x,  // Grid coordinates for height calculation
+              gridY: y,  // Grid coordinates for height calculation
               tick: gameState.tick
             });
           }
@@ -500,7 +530,8 @@ const GameScene = ({ gameState }: GameSceneProps) => {
             cellHeight = 1;  // Wall height
           } else if (cell.content === 'breakableWall') {
             cellColor = BREAKABLE_WALL_COLOR;
-            cellHeight = 0.8;  // Breakable wall height
+            // Use our deterministic function to get varying heights
+            cellHeight = getBreakableWallHeight(x, y);
           } else if (cell.paintedBy) {
             // If painted, use player's color
             const player = gameState.players.get(cell.paintedBy);
@@ -669,6 +700,8 @@ const GameScene = ({ gameState }: GameSceneProps) => {
           key={`wall-destruction-${index}-${wall.tick}`}
           x={wall.x}
           y={wall.y}
+          gridX={wall.gridX}
+          gridY={wall.gridY}
           tick={gameState.tick}
           startTick={wall.tick}
           color={BREAKABLE_WALL_COLOR}
