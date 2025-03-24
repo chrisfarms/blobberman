@@ -565,7 +565,7 @@ function resetPlayerPaintedAreas(state: GameState, playerId: string): void {
 }
 
 export function processGameTick(currentState: GameState, tick: GameTick): GameState {
-  if (tick.tick < currentState.tick) {
+  if (tick.tick <= currentState.tick) {
     console.warn(`Tick ${tick.tick} is less than current tick ${currentState.tick}`);
     return currentState;
   }

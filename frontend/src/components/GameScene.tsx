@@ -1,28 +1,29 @@
 import { useRef, useMemo, useState, useEffect } from 'react';
-import { GridHelper, Group, Mesh, MeshStandardMaterial, Vector3 } from 'three';
+import { GridHelper, Group, Mesh, MeshStandardMaterial, Vector3, MeshPhysicalMaterial, Color } from 'three';
 import { GameState, PowerUpType, Bomb, Explosion, PlayerState, GridCell } from '@/game/simulation';
 import { Html } from '@react-three/drei';
 import { ENV } from '@/utils/env';
 import { willSpawnPowerUpAtPosition, getPowerUpTypeAtPosition } from '@/utils/random';
 import { useFrame } from '@react-three/fiber';
+import CustomRoundedBox from './RoundedBox';
 
 interface GameSceneProps {
   gameState: GameState;
 }
 
-// Colors for different cell types
-const WALL_COLOR = '#555555';
-const BREAKABLE_WALL_COLOR = '#8a6d3b';
-const FLOOR_COLOR = '#aaaaaa';
+// Colors for different cell types - using brighter, more vibrant colors for a toy-like feel
+const WALL_COLOR = '#666666';  // Slightly lighter gray
+const BREAKABLE_WALL_COLOR = '#c09458';  // Warmer, more saturated tan
+const FLOOR_COLOR = '#b0b0b0';  // Lighter gray
 
-// Colors for different power-up types
+// Colors for different power-up types - more saturated for toy-like appearance
 const POWER_UP_COLORS = {
-  [PowerUpType.ExtraBomb]: '#ff5500',    // Orange-red
-  [PowerUpType.LongerSplat]: '#00aaff',  // Light blue
-  [PowerUpType.ShorterFuse]: '#ffaa00',  // Amber
-  [PowerUpType.SpeedBoost]: '#33cc33',   // Green
-  [PowerUpType.SplatShield]: '#9966ff',  // Purple
-  [PowerUpType.SplashJump]: '#ff33cc'    // Pink
+  [PowerUpType.ExtraBomb]: '#ff4400',     // Brighter orange-red
+  [PowerUpType.LongerSplat]: '#00ccff',   // Brighter blue
+  [PowerUpType.ShorterFuse]: '#ffaa00',   // Amber
+  [PowerUpType.SpeedBoost]: '#33dd44',    // Brighter green
+  [PowerUpType.SplatShield]: '#bb66ff',   // Brighter purple
+  [PowerUpType.SplashJump]: '#ff44dd'     // Brighter pink
 };
 
 // Constants for power-up spawning (matching those in simulation.ts)
@@ -88,10 +89,14 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
       {/* Main blob body */}
       <mesh ref={meshRef} castShadow receiveShadow>
         <sphereGeometry args={[0.5, 16, 16]} />
-        <meshStandardMaterial
+        <meshPhysicalMaterial
           color={player.color}
-          roughness={0.3}
-          metalness={0.2}
+          roughness={0.1}
+          metalness={0.0}
+          clearcoat={1.0}
+          clearcoatRoughness={0.1}
+          reflectivity={0.8}
+          emissive={new Color(player.color).multiplyScalar(0.2)}
         />
       </mesh>
 
@@ -100,23 +105,39 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
         {/* Left eye */}
         <mesh position={[-0.2, 0, 0]}>
           <sphereGeometry args={[0.12, 8, 8]} />
-          <meshStandardMaterial color="white" />
+          <meshPhysicalMaterial
+            color="white"
+            roughness={0.05}
+            clearcoat={1.0}
+          />
         </mesh>
         {/* Left pupil */}
         <mesh position={[-0.2, 0, -0.08]}>
           <sphereGeometry args={[0.06, 8, 8]} />
-          <meshStandardMaterial color="black" />
+          <meshPhysicalMaterial
+            color="black"
+            roughness={0.05}
+            clearcoat={1.0}
+          />
         </mesh>
 
         {/* Right eye */}
         <mesh position={[0.2, 0, 0]}>
           <sphereGeometry args={[0.12, 8, 8]} />
-          <meshStandardMaterial color="white" />
+          <meshPhysicalMaterial
+            color="white"
+            roughness={0.05}
+            clearcoat={1.0}
+          />
         </mesh>
         {/* Right pupil */}
         <mesh position={[0.2, 0, -0.08]}>
           <sphereGeometry args={[0.06, 8, 8]} />
-          <meshStandardMaterial color="black" />
+          <meshPhysicalMaterial
+            color="black"
+            roughness={0.05}
+            clearcoat={1.0}
+          />
         </mesh>
       </group>
 
@@ -126,19 +147,22 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
           {/* Shield sphere */}
           <mesh>
             <sphereGeometry args={[0.7, 16, 16]} />
-            <meshStandardMaterial
+            <meshPhysicalMaterial
               color={POWER_UP_COLORS[PowerUpType.SplatShield]}
               transparent
-              opacity={0.3}
+              opacity={0.4}
               emissive={POWER_UP_COLORS[PowerUpType.SplatShield]}
-              emissiveIntensity={0.5}
+              emissiveIntensity={0.7}
+              clearcoat={1.0}
+              transmission={0.2}
+              roughness={0.1}
             />
           </mesh>
           {/* Shield glow effect */}
           <pointLight
             color={POWER_UP_COLORS[PowerUpType.SplatShield]}
-            distance={1.5}
-            intensity={0.5}
+            distance={1.8}
+            intensity={0.7}
             position={[0, 0, 0]}
           />
         </>
@@ -148,10 +172,13 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
       {player.canJump && (
         <mesh position={[0, -0.5, 0]}>
           <coneGeometry args={[0.2, 0.4, 16]} />
-          <meshStandardMaterial
+          <meshPhysicalMaterial
             color={POWER_UP_COLORS[PowerUpType.SplashJump]}
             emissive={POWER_UP_COLORS[PowerUpType.SplashJump]}
-            emissiveIntensity={0.5}
+            emissiveIntensity={0.7}
+            clearcoat={1.0}
+            clearcoatRoughness={0.1}
+            roughness={0.2}
           />
         </mesh>
       )}
@@ -160,10 +187,13 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
       {player.speedMultiplier > 1.0 && (
         <mesh position={[0, -0.3, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.6, 0.7, 16]} />
-          <meshBasicMaterial
+          <meshPhysicalMaterial
             color={POWER_UP_COLORS[PowerUpType.SpeedBoost]}
             transparent
-            opacity={0.7}
+            opacity={0.8}
+            emissive={POWER_UP_COLORS[PowerUpType.SpeedBoost]}
+            emissiveIntensity={0.5}
+            clearcoat={0.8}
             side={2} // Double-sided
           />
         </mesh>
@@ -190,21 +220,26 @@ const PaintBomb = ({ bomb, tick, playerColor }: PaintBombProps) => {
     <group position={[bomb.x, 0.3, bomb.y]}>
       <mesh castShadow>
         <sphereGeometry args={[scale, 16, 16]} />
-        <meshStandardMaterial
+        <meshPhysicalMaterial
           color="black"
           emissive={playerColor}
           emissiveIntensity={intensity}
+          roughness={0.2}
+          metalness={0.0}
+          clearcoat={0.8}
+          clearcoatRoughness={0.2}
+          reflectivity={0.5}
         />
       </mesh>
 
       {/* Timer visualization */}
       <mesh position={[0, 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.2, 0.25, 32]} />
-        <meshBasicMaterial color="white" transparent opacity={0.8} />
+        <meshPhysicalMaterial color="white" transparent opacity={0.8} clearcoat={0.5} />
       </mesh>
       <mesh position={[0, 0.51, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.2, 0.25, 32, 1, 0, bombProgress * Math.PI * 2]} />
-        <meshBasicMaterial color="red" />
+        <meshPhysicalMaterial color="red" emissive="red" emissiveIntensity={0.5} clearcoat={1.0} />
       </mesh>
     </group>
   );
@@ -370,18 +405,20 @@ const WallDestruction = ({ x, y, tick, startTick, color }: WallDestructionProps)
         const opacity = 1 - easedProgress;
 
         return (
-          <mesh
+          <CustomRoundedBox
             key={`fragment-${i}`}
             position={[currentX, currentY, currentZ]}
             rotation={[rotX, rotY, rotZ]}
-          >
-            <boxGeometry args={[fragment.size, fragment.size, fragment.size]} />
-            <meshStandardMaterial
-              color={color}
-              transparent
-              opacity={opacity}
-            />
-          </mesh>
+            width={fragment.size}
+            height={fragment.size}
+            depth={fragment.size}
+            radius={0.02} // Smaller radius for fragments
+            color={color}
+            roughness={0.2}
+            metalness={0.1}
+            transparent
+            opacity={opacity}
+          />
         );
       })}
     </group>
@@ -492,15 +529,25 @@ const GameScene = ({ gameState }: GameSceneProps) => {
           }
 
           return (
-            <mesh
+            <CustomRoundedBox
               key={`cell-${x}-${y}`}
               position={[posX, posY + cellHeight / 2, posZ]}
+              width={0.95}
+              height={cellHeight}
+              depth={0.95}
+              radius={0.05}
+              segments={2}
               castShadow={cell.content !== 'empty'}
               receiveShadow
+              color={cellColor}
+              roughness={0.2}
+              metalness={0.1}
+              clearcoat={0.8}
+              clearcoatRoughness={0.2}
+              reflectivity={0.5}
+              emissive={cell.content !== 'empty' ? cellColor : undefined}
+              emissiveIntensity={cell.content !== 'empty' ? 0.15 : 0}
             >
-              <boxGeometry args={[0.95, cellHeight, 0.95]} />
-              <meshStandardMaterial color={cellColor} />
-
               {/* Dev mode power-up indicator */}
               {ENV.DEV_MODE && wouldSpawnPowerUp && predictedPowerUpType && (
                 <Html position={[0, cellHeight/2 + 0.5, 0]} center zIndexRange={[1, 10]}>
@@ -524,7 +571,7 @@ const GameScene = ({ gameState }: GameSceneProps) => {
                   </div>
                 </Html>
               )}
-            </mesh>
+            </CustomRoundedBox>
           );
         })
       )}
@@ -588,10 +635,16 @@ const GameScene = ({ gameState }: GameSceneProps) => {
               ) : (
                 <coneGeometry args={[0.2, 0.4, 16]} />
               )}
-              <meshStandardMaterial
+              <meshPhysicalMaterial
                 color={powerUpColor}
                 emissive={powerUpColor}
-                emissiveIntensity={0.5}
+                emissiveIntensity={0.7}
+                roughness={0.1}
+                metalness={0.1}
+                clearcoat={1.0}
+                clearcoatRoughness={0.1}
+                reflectivity={0.8}
+                transmission={0.2}
               />
             </mesh>
 

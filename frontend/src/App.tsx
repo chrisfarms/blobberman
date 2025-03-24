@@ -52,10 +52,10 @@ function App() {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f0f0f0',
+        backgroundColor: '#121212',
         flexDirection: 'column',
         fontFamily: 'Arial, sans-serif',
-        color: '#333'
+        color: '#e0e0e0'
       }}>
         <h2>Loading game...</h2>
         <p>Connecting to server: {connectionState}</p>
@@ -82,13 +82,14 @@ function App() {
           pointerEvents: showNameModal ? 'none' : 'auto' // Disable pointer events when modal is active
         }}
       >
-        <color attach="background" args={['#e6e6e6']} />
-        <ambientLight intensity={0.5} />
+        <color attach="background" args={['#121212']} />
+        <ambientLight intensity={0.5} color="#b0c4de" />
 
         {/* Main directional light for general illumination */}
         <directionalLight
           position={[20, 30, 20]}
-          intensity={0.7}
+          intensity={0.8}
+          color="#ffffff"
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
@@ -101,7 +102,8 @@ function App() {
         {/* Secondary light from the opposite direction to reduce harsh shadows */}
         <directionalLight
           position={[-20, 20, -20]}
-          intensity={0.3}
+          intensity={0.4}
+          color="#a0e6ff"
           castShadow
           shadow-mapSize-width={1024}
           shadow-mapSize-height={1024}
@@ -113,11 +115,11 @@ function App() {
 
         {/* Add a soft hemisphere light with more contrast */}
         <hemisphereLight
-          args={['#e0e0ff', '#c0c0c0', 0.5]}
+          args={['#80a0ff', '#403060', 0.6]}
         />
 
         {/* Add a subtle fog effect for depth */}
-        <fog attach="fog" args={['#d0d0d0', 40, 90]} />
+        <fog attach="fog" args={['#1a1a2e', 50, 100]} />
 
         <GameScene gameState={gameState} />
         {currentPlayer && (
