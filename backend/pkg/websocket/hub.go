@@ -417,12 +417,6 @@ func (h *Hub) resetGameSession() {
 func (h *Hub) AddInput(input types.PlayerInput) {
 	h.InputMutex.Lock()
 	defer h.InputMutex.Unlock()
-
-	h.debugLog("Received input from player %s: direction=%v, placeBlob=%v",
-		input.PlayerID,
-		input.Direction,
-		input.PlaceBlob)
-
 	h.CurrentInputs = append(h.CurrentInputs, input)
 }
 

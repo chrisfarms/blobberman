@@ -13,9 +13,14 @@ import useSoundEffects from './hooks/useSoundEffects';
 function App() {
   const { connectionState, playerId, displayName, gameState, sendInput, setDisplayName } = useWebSocket();
 
-  // Reference to store the current direction for sending to the server
-  const currentDirectionRef = useRef<Direction | null>(null);
-  const placeBlob = useRef(false);
+  // Track input state
+  const inputState = useRef({
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    placeBlob: false
+  });
 
   // Get current player data
   const currentPlayer = gameState ? gameState.players.get(playerId) : undefined;
@@ -24,16 +29,18 @@ function App() {
   useSoundEffects(gameState);
 
   // Handler for player controls - will be passed to the Controls component
-  const handleControlsChange = (direction: Direction | null, isPlacingBlob: boolean) => {
-    // Update refs
-    currentDirectionRef.current = direction;
-    placeBlob.current = isPlacingBlob;
+  const handleControlsChange = (
+    directionalInput: {up: boolean, down: boolean, left: boolean, right: boolean},
+    isPlacingBlob: boolean
+  ) => {
+    // Update input state
+    inputState.current = {
+      ...directionalInput,
+      placeBlob: isPlacingBlob
+    };
 
     // Send input to server
-    sendInput({
-      direction,
-      placeBlob: isPlacingBlob
-    });
+    sendInput(inputState.current);
   };
 
   // Handler for name input submission

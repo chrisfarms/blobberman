@@ -1,10 +1,14 @@
 // Player Input types
 export interface PlayerInput {
   playerId: string;
-  direction: Direction | null;
+  up: boolean;
+  down: boolean;
+  left: boolean;
+  right: boolean;
   placeBlob: boolean;
 }
 
+// For backward compatibility and type safety
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
 // Game Tick types

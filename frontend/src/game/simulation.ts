@@ -79,6 +79,7 @@ export interface PlayerState {
   hasShield: boolean; // Whether the player has a shield
   shieldEndTick: number; // Tick when the shield ends
   canJump: boolean; // Whether the player can jump
+  diagonalDirection: string | null; // Track diagonal movement for rendering
 }
 
 const PLAYER_COLORS = [
@@ -103,6 +104,9 @@ const EXTRA_BOMB_MAX = 5; // Maximum number of bombs a player can have
 const LONGER_SPLAT_MAX = 6; // Maximum explosion size
 const SHORTER_FUSE_MIN = 0.5; // Minimum fuse time multiplier (50% of normal)
 const SPEED_BOOST_MAX = 1.3; // Maximum speed multiplier
+
+// Define player collision radius
+const PLAYER_COLLISION_RADIUS = 0.4; // Size of the circular collision area around the player
 
 // Create a grid with walls and breakable walls
 function createInitialGrid(size: number): GridCell[][] {
@@ -225,6 +229,27 @@ function getCellCoords(x: number, y: number): { cellX: number, cellY: number } {
 
 // Check if a position is valid for movement
 function canMoveTo(grid: GridCell[][], x: number, y: number): boolean {
+  // Check the center point
+  if (!isValidCell(grid, x, y)) {
+    return false;
+  }
+
+  // Check points around the player in a circle to create a circular collision
+  // We'll check 8 points around the player's position
+  for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+    const checkX = x + Math.cos(angle) * PLAYER_COLLISION_RADIUS;
+    const checkY = y + Math.sin(angle) * PLAYER_COLLISION_RADIUS;
+
+    if (!isValidCell(grid, checkX, checkY)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// Helper function to check if a cell is valid for movement
+function isValidCell(grid: GridCell[][], x: number, y: number): boolean {
   const { cellX, cellY } = getCellCoords(x, y);
 
   // Check grid boundaries
@@ -514,6 +539,7 @@ function resetPlayerPaintedAreas(state: GameState, playerId: string): void {
     player.hasShield = false;
     player.shieldEndTick = 0;
     player.canJump = false;
+    player.diagonalDirection = null;
   }
 }
 
@@ -743,7 +769,8 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
         speedBoostEndTick: 0,
         hasShield: false,
         shieldEndTick: 0,
-        canJump: false
+        canJump: false,
+        diagonalDirection: null
       });
 
       // Initialize painted count
@@ -752,39 +779,83 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
 
     const player = newState.players.get(input.playerId)!;
 
-    // Update player based on input
-    if (input.direction) {
-      // Store last direction
-      player.lastDirection = input.direction;
+    // Update player based on input - now handling multi-directional movement
+    let newX = player.x;
+    let newY = player.y;
 
-      // Calculate new position
-      let newX = player.x;
-      let newY = player.y;
+    // Move 0.2 units per tick (at 20 ticks per second, this is 4 units per second)
+    const moveAmount = 0.2 * player.speedMultiplier;
+    let movingDiagonally = false;
 
-      // Move 0.2 units per tick (at 20 ticks per second, this is 4 units per second)
-      const moveAmount = 0.2;
+    // Check if moving diagonally (both vertical and horizontal at the same time)
+    if ((input.up || input.down) && (input.left || input.right)) {
+      movingDiagonally = true;
+    }
 
-      switch (input.direction) {
-        case 'up':
-          newY -= moveAmount;
-          break;
-        case 'down':
-          newY += moveAmount;
-          break;
-      }
-      switch (input.direction) {
-        case 'left':
+    // Apply diagonal movement at reduced speed (multiply by ~0.7071 to normalize)
+    const diagonalMultiplier = movingDiagonally ? 0.7071 : 1.0;
+
+    // Apply vertical movement
+    if (input.up) {
+      newY -= moveAmount * diagonalMultiplier;
+      player.lastDirection = 'up';
+    } else if (input.down) {
+      newY += moveAmount * diagonalMultiplier;
+      player.lastDirection = 'down';
+    }
+
+    // Apply horizontal movement
+    if (input.left) {
+      newX -= moveAmount * diagonalMultiplier;
+      player.lastDirection = 'left';
+    } else if (input.right) {
+      newX += moveAmount * diagonalMultiplier;
+      player.lastDirection = 'right';
+    }
+
+    // Set diagonal direction for rendering
+    if (input.up && input.left) {
+      player.diagonalDirection = 'up-left';
+    } else if (input.up && input.right) {
+      player.diagonalDirection = 'up-right';
+    } else if (input.down && input.left) {
+      player.diagonalDirection = 'down-left';
+    } else if (input.down && input.right) {
+      player.diagonalDirection = 'down-right';
+    } else {
+      player.diagonalDirection = null;
+    }
+
+    // Check collision and update position
+    if (canMoveTo(newState.grid, newX, newY)) {
+      player.x = newX;
+      player.y = newY;
+    } else {
+      // If diagonal movement fails, try to move horizontally or vertically
+      if (movingDiagonally) {
+        // Try moving just horizontally
+        newX = player.x;
+        if (input.left) {
           newX -= moveAmount;
-          break;
-        case 'right':
+        } else if (input.right) {
           newX += moveAmount;
-          break;
-      }
+        }
 
-      // Check collision and update position
-      if (canMoveTo(newState.grid, newX, newY)) {
-        player.x = newX;
-        player.y = newY;
+        if (canMoveTo(newState.grid, newX, player.y)) {
+          player.x = newX;
+        }
+
+        // Try moving just vertically
+        newY = player.y;
+        if (input.up) {
+          newY -= moveAmount;
+        } else if (input.down) {
+          newY += moveAmount;
+        }
+
+        if (canMoveTo(newState.grid, player.x, newY)) {
+          player.y = newY;
+        }
       }
     }
 

@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState, useEffect } from 'react';
-import { GridHelper, Group, Mesh, MeshStandardMaterial, Vector3, MeshPhysicalMaterial, Color } from 'three';
+import { GridHelper, Group, Mesh, MeshStandardMaterial, Vector3, MeshPhysicalMaterial, Color, MathUtils } from 'three';
 import { GameState, PowerUpType, Bomb, Explosion, PlayerState, GridCell } from '@/game/simulation';
 import { Html } from '@react-three/drei';
 import { ENV } from '@/utils/env';
@@ -49,8 +49,14 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
   // Refs to store the current visual position
   const groupRef = useRef<Group>(null);
 
+  // Ref to store target rotation
+  const targetRotationRef = useRef(0);
+
   // Movement lerp alpha (adjust for desired smoothness)
   const movementAlpha = 0.15;
+
+  // Rotation lerp alpha (can be different from movement for faster/slower rotation)
+  const rotationAlpha = 0.2;
 
   // Calculate base bounce and wiggle animations based on game tick
   const bounce = Math.sin(tick * 0.1) * 0.05;
@@ -72,14 +78,59 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
       deltaTime
     );
     group.position.y = 0.5 + bounce;
-    // calc rotation so that the player faces the direction they are moving
-    if (player.lastDirection) {
-      group.rotation.y = player.lastDirection === 'up' ? 0 : player.lastDirection === 'down' ? Math.PI : player.lastDirection === 'left' ? Math.PI / 2 : -Math.PI / 2;
+
+    // Calculate rotation based on movement direction
+    // Support 8-way rotation including diagonal directions
+    type DirectionMap = {
+      [key: string]: number;
+    };
+
+    const rotations: DirectionMap = {
+      'up': 0,
+      'down': Math.PI,
+      'left': Math.PI / 2,
+      'right': -Math.PI / 2,
+      // Add diagonal directions
+      'up-left': Math.PI / 4,
+      'up-right': -Math.PI / 4,
+      'down-left': 3 * Math.PI / 4,
+      'down-right': -3 * Math.PI / 4
+    };
+
+    // Use diagonal direction if available, otherwise fall back to regular direction
+    const directionKey = player.diagonalDirection || player.lastDirection;
+
+    if (directionKey) {
+      // Update the target rotation
+      targetRotationRef.current = rotations[directionKey] || 0;
     }
-    const isMoving = player.lastDirection !== null;
-    const movementWiggle = isMoving ? Math.sin(tick * 0.2) * 0.15 : 0;
+
+    // Calculate the shortest path for rotation
+    let currentRotation = group.rotation.y;
+    let targetRotation = targetRotationRef.current;
+
+    // Normalize both rotations to be in the range [-PI, PI]
+    while (currentRotation > Math.PI) currentRotation -= Math.PI * 2;
+    while (currentRotation < -Math.PI) currentRotation += Math.PI * 2;
+    while (targetRotation > Math.PI) targetRotation -= Math.PI * 2;
+    while (targetRotation < -Math.PI) targetRotation += Math.PI * 2;
+
+    // Find the shortest rotation direction
+    let rotationDiff = targetRotation - currentRotation;
+    if (rotationDiff > Math.PI) rotationDiff -= Math.PI * 2;
+    if (rotationDiff < -Math.PI) rotationDiff += Math.PI * 2;
+
+    // Apply lerp to the rotation
+    group.rotation.y = lerpVector(
+      currentRotation,
+      currentRotation + rotationDiff,
+      rotationAlpha,
+      deltaTime
+    );
+
+    const isMoving = Math.abs(group.position.x - player.x) > 0.01 || Math.abs(group.position.z - player.y) > 0.01;
+    const movementWiggle = isMoving ? Math.sin(tick * 0.2) * 0.05 : 0;
     group.rotation.y += movementWiggle;
-//   const wiggle = Math.sin(tick * 0.05) * 0.1;
   });
 
   return (

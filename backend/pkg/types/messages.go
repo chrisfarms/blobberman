@@ -12,9 +12,12 @@ const (
 
 // PlayerInput represents a single player's input for a game tick
 type PlayerInput struct {
-	PlayerID  string     `json:"playerId"`
-	Direction *Direction `json:"direction"`
-	PlaceBlob bool       `json:"placeBlob"`
+	PlayerID  string `json:"playerId"`
+	Up        bool   `json:"up"`
+	Down      bool   `json:"down"`
+	Left      bool   `json:"left"`
+	Right     bool   `json:"right"`
+	PlaceBlob bool   `json:"placeBlob"`
 }
 
 // GameTick represents a single tick of the game with all player inputs
