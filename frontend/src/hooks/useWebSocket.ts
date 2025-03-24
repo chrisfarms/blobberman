@@ -44,21 +44,79 @@ export const useWebSocket = (): UseWebSocketResult => {
   const processGameHistory = useCallback((historyMsg: HistorySyncMessage) => {
     console.log(`Processing game history: ticks ${historyMsg.fromTick} to ${historyMsg.toTick} (${historyMsg.history.length} ticks)`);
 
-    // Process history with small delays to avoid freezing the UI
+    // Process all history in a single synchronous loop
     const history = historyMsg.history;
-    let currentIndex = 0;
+    let lastProcessedTick = -1;
 
-    const processNextBatch = () => {
-      const batchSize = 20; // Process 20 ticks at once
-      const endIndex = Math.min(currentIndex + batchSize, history.length);
+    // Process each tick in sequence
+    for (let i = 0; i < history.length; i++) {
+      const tick = history[i];
 
-      // Process this batch of ticks
-      for (let i = currentIndex; i < endIndex; i++) {
+      // Skip if we've already processed this tick
+      if (tick.tick <= lastProcessedTick) {
+        console.log(`Skipping duplicate tick ${tick.tick} (already processed ${lastProcessedTick})`);
+        continue;
+      }
+
+      setGameState(currentState => {
+        const newState = processGameTick(currentState, tick);
+        lastProcessedTick = tick.tick;
+
+        // Only check for game over if we're not already in a game over state
+        if (!newState.gameOver && newState.maxTicks > 0 && newState.tick >= newState.maxTicks) {
+          // Find the winner (player with the most painted tiles)
+          let maxPaintedCount = 0;
+          let winner: string | null = null;
+
+          for (const [playerId, count] of newState.paintedCounts.entries()) {
+            if (count > maxPaintedCount) {
+              maxPaintedCount = count;
+              winner = playerId;
+            } else if (count === maxPaintedCount && count > 0) {
+              // If there's a tie, set winner to null
+              winner = null;
+            }
+          }
+
+          console.log(`Game over from history! Winner: ${winner || 'Tie'}`);
+          return {
+            ...newState,
+            gameOver: true,
+            winner
+          };
+        }
+
+        return newState;
+      });
+    }
+
+    // History processing complete
+    console.log('History processing complete');
+    isProcessingHistory.current = false;
+
+    // Process any pending ticks that came in while we were replaying history
+    if (pendingTicksRef.current.length > 0) {
+      console.log(`Processing ${pendingTicksRef.current.length} pending ticks after history`);
+
+      // Sort ticks by tick number to ensure correct order
+      pendingTicksRef.current.sort((a, b) => a.tick - b.tick);
+
+      // Process each pending tick, skipping any we've already processed
+      for (let i = 0; i < pendingTicksRef.current.length; i++) {
+        const tick = pendingTicksRef.current[i];
+
+        // Skip if we've already processed this tick
+        if (tick.tick <= lastProcessedTick) {
+          console.log(`Skipping duplicate pending tick ${tick.tick} (already processed ${lastProcessedTick})`);
+          continue;
+        }
+
         setGameState(currentState => {
-          const newState = processGameTick(currentState, history[i]);
+          const newState = processGameTick(currentState, tick);
+          lastProcessedTick = tick.tick;
 
-          // Check if this is the last tick and if game should be over
-          if (i === history.length - 1 && newState.maxTicks > 0 && newState.tick >= newState.maxTicks) {
+          // Only check for game over if we're not already in a game over state
+          if (!newState.gameOver && newState.maxTicks > 0 && newState.tick >= newState.maxTicks) {
             // Find the winner (player with the most painted tiles)
             let maxPaintedCount = 0;
             let winner: string | null = null;
@@ -73,7 +131,7 @@ export const useWebSocket = (): UseWebSocketResult => {
               }
             }
 
-            console.log(`Game over from history! Winner: ${winner || 'Tie'}`);
+            console.log(`Game over from pending ticks! Winner: ${winner || 'Tie'}`);
             return {
               ...newState,
               gameOver: true,
@@ -85,67 +143,9 @@ export const useWebSocket = (): UseWebSocketResult => {
         });
       }
 
-      currentIndex = endIndex;
-
-      if (currentIndex < history.length) {
-        // Schedule next batch
-        setTimeout(processNextBatch, 0);
-      } else {
-        // History processing complete
-        console.log('History processing complete');
-        isProcessingHistory.current = false;
-
-        // Process any pending ticks that came in while we were replaying history
-        if (pendingTicksRef.current.length > 0) {
-          console.log(`Processing ${pendingTicksRef.current.length} pending ticks after history`);
-
-          // Sort ticks by tick number to ensure correct order
-          pendingTicksRef.current.sort((a, b) => a.tick - b.tick);
-
-          // Process each pending tick
-          for (let i = 0; i < pendingTicksRef.current.length; i++) {
-            const tick = pendingTicksRef.current[i];
-            setGameState(currentState => {
-              const newState = processGameTick(currentState, tick);
-
-              // Check if this is the last pending tick and if the game should be over
-              if (i === pendingTicksRef.current.length - 1 &&
-                  newState.maxTicks > 0 && newState.tick >= newState.maxTicks &&
-                  !newState.gameOver) {
-                // Find the winner (player with the most painted tiles)
-                let maxPaintedCount = 0;
-                let winner: string | null = null;
-
-                for (const [playerId, count] of newState.paintedCounts.entries()) {
-                  if (count > maxPaintedCount) {
-                    maxPaintedCount = count;
-                    winner = playerId;
-                  } else if (count === maxPaintedCount && count > 0) {
-                    // If there's a tie, set winner to null
-                    winner = null;
-                  }
-                }
-
-                console.log(`Game over from pending ticks! Winner: ${winner || 'Tie'}`);
-                return {
-                  ...newState,
-                  gameOver: true,
-                  winner
-                };
-              }
-
-              return newState;
-            });
-          }
-
-          // Clear the queue
-          pendingTicksRef.current = [];
-        }
-      }
-    };
-
-    // Start processing
-    processNextBatch();
+      // Clear the queue
+      pendingTicksRef.current = [];
+    }
   }, []);
 
   // Function to connect to WebSocket server
@@ -196,15 +196,19 @@ export const useWebSocket = (): UseWebSocketResult => {
             console.log(`Connected to server with our player ID: ${playerId}`);
             console.log(`Game session info: maxTicks=${connectMsg.maxTicks}, tickInterval=${connectMsg.tickInterval}ms`);
 
-            // Reset state when reconnecting (in case of new game session)
-            setGameState(createInitialGameState());
-
             // Update game state with session information
-            setGameState(currentState => ({
-              ...currentState,
-              maxTicks: connectMsg.maxTicks,
-              tickInterval: connectMsg.tickInterval
-            }));
+            setGameState(() => {
+                const newState = createInitialGameState();
+                const maxTicks = connectMsg.maxTicks;
+                const tickInterval = connectMsg.tickInterval;
+                return {
+                    ...newState,
+                    maxTicks,
+                    tickInterval,
+                    gameOver: false, // Ensure we're not in a game over state
+                    winner: null // Clear any previous winner
+                }
+            });
 
             // Clear any existing countdown
             setResetCountdown(null);
@@ -228,8 +232,8 @@ export const useWebSocket = (): UseWebSocketResult => {
               setGameState(currentState => {
                 const newState = processGameTick(currentState, tickMsg.tick);
 
-                // Check if game is over
-                if (newState.maxTicks > 0 && newState.tick >= newState.maxTicks && !newState.gameOver) {
+                // Only check for game over if we're not already in a game over state
+                if (!newState.gameOver && newState.maxTicks > 0 && newState.tick >= newState.maxTicks) {
                   // Find the winner (player with the most painted tiles)
                   let maxPaintedCount = 0;
                   let winner: string | null = null;
@@ -273,6 +277,7 @@ export const useWebSocket = (): UseWebSocketResult => {
 
             // Update countdown state
             setResetCountdown(resetMsg.countdownSec);
+
             break;
 
           case 'displayName':

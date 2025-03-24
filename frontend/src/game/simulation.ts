@@ -281,13 +281,18 @@ function processExplosions(state: GameState): void {
       }
 
       // Create the explosion
-      newExplosions.push({
+      const explosion = {
         playerId: bomb.playerId,
         x: bomb.x,
         y: bomb.y,
         arms,
         startedAt: tick
-      });
+      };
+
+      // Check for hits immediately when the explosion starts
+      checkExplosionHits(state, explosion);
+
+      newExplosions.push(explosion);
 
       // Decrement the player's active bomb count
       const bombPlayer = state.players.get(bomb.playerId);
@@ -305,7 +310,7 @@ function processExplosions(state: GameState): void {
   // Add new explosions
   state.explosions.push(...newExplosions);
 
-  // Process active explosions
+  // Process active explosions (only for visual effects)
   const remainingExplosions: Explosion[] = [];
 
   for (const explosion of explosions) {
@@ -323,6 +328,83 @@ function processExplosions(state: GameState): void {
 
   // Update explosions
   state.explosions = remainingExplosions;
+}
+
+// Check if any players are hit by an explosion (called only when explosion starts)
+function checkExplosionHits(state: GameState, explosion: Explosion): void {
+  const { players } = state;
+
+  // Check for other bombs in the explosion radius
+  checkBombsInExplosion(state, explosion);
+
+  for (const [playerId, player] of players.entries()) {
+    // Skip hit detection for players who have no painted areas
+    const paintedCount = state.paintedCounts.get(playerId) || 0;
+    if (paintedCount === 0) continue;
+
+    // Check if the player is in the explosion radius
+    const playerCellX = Math.floor(player.x + state.gridSize / 2);
+    const playerCellY = Math.floor(player.y + state.gridSize / 2);
+    const expCellX = Math.floor(explosion.x + state.gridSize / 2);
+    const expCellY = Math.floor(explosion.y + state.gridSize / 2);
+
+    // Check center of explosion
+    if (playerCellX === expCellX && playerCellY === expCellY) {
+      // Player is hit, reset their painted areas
+      resetPlayerPaintedAreas(state, playerId);
+      continue;
+    }
+
+    // Check explosion arms
+    for (const arm of explosion.arms) {
+      const armCellX = Math.floor(arm.x + state.gridSize / 2);
+      const armCellY = Math.floor(arm.y + state.gridSize / 2);
+
+      if (playerCellX === armCellX && playerCellY === armCellY) {
+        // Player is hit, reset their painted areas
+        resetPlayerPaintedAreas(state, playerId);
+        break;
+      }
+    }
+  }
+}
+
+// Check if other bombs are hit by an explosion and trigger chain reactions
+function checkBombsInExplosion(state: GameState, explosion: Explosion): void {
+  // Look for bombs in the explosion radius
+  for (const bomb of state.bombs) {
+    // Skip bombs that have already exploded
+    if (bomb.exploded) continue;
+
+    // Skip the bomb that caused this explosion
+    if (bomb.x === explosion.x && bomb.y === explosion.y) continue;
+
+    const bombCellX = Math.floor(bomb.x + state.gridSize / 2);
+    const bombCellY = Math.floor(bomb.y + state.gridSize / 2);
+    const expCellX = Math.floor(explosion.x + state.gridSize / 2);
+    const expCellY = Math.floor(explosion.y + state.gridSize / 2);
+
+    // Check if bomb is at the center of the explosion
+    if (bombCellX === expCellX && bombCellY === expCellY) {
+      // Trigger immediate explosion
+      bomb.placedAt = state.tick - Math.floor(BOMB_TIMER * bomb.fuseMultiplier);
+      console.log("Chain reaction: bomb triggered by explosion!");
+      continue;
+    }
+
+    // Check if bomb is in any explosion arm
+    for (const arm of explosion.arms) {
+      const armCellX = Math.floor(arm.x + state.gridSize / 2);
+      const armCellY = Math.floor(arm.y + state.gridSize / 2);
+
+      if (bombCellX === armCellX && bombCellY === armCellY) {
+        // Trigger immediate explosion
+        bomb.placedAt = state.tick - Math.floor(BOMB_TIMER * bomb.fuseMultiplier);
+        console.log("Chain reaction: bomb triggered by explosion!");
+        break;
+      }
+    }
+  }
 }
 
 // Paint cells affected by an explosion
@@ -501,9 +583,6 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
     // Process explosions (only for existing bombs, don't allow new ones)
     processExplosions(newState);
 
-    // Check if any players are hit by explosions
-    checkPlayerHit(newState);
-
     // Check if any players collect power-ups
     checkPowerUpCollection(newState);
 
@@ -512,7 +591,6 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
 
   // Normal gameplay - process bombs, explosions, player hits, and inputs
   processExplosions(newState);
-  checkPlayerHit(newState);
   checkPowerUpCollection(newState);
 
   // Process each input
@@ -574,7 +652,8 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
       let newX = player.x;
       let newY = player.y;
 
-      const moveAmount = 0.3; // Increased from 0.2 for even faster movement
+      // Move 0.2 units per tick (at 20 ticks per second, this is 4 units per second)
+      const moveAmount = 0.2;
 
       switch (input.direction) {
         case 'up':
