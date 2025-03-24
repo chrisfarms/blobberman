@@ -227,6 +227,9 @@ export const useWebSocket = (): UseWebSocketResult => {
             if (isProcessingHistory.current) {
               console.log(`Queuing tick ${tickMsg.tick.tick} while processing history`);
               pendingTicksRef.current.push(tickMsg.tick);
+            } else if (gameState.gameOver) {
+                console.warn(`Game over! Skipping unexpected tick ${tickMsg.tick.tick}`);
+                return;
             } else {
               // Process the game tick
               setGameState(currentState => {

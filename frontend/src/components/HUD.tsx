@@ -101,6 +101,12 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
         return 'Longer Splat';
       case PowerUpType.ShorterFuse:
         return 'Shorter Fuse';
+      case PowerUpType.SpeedBoost:
+        return 'Speed Boost';
+      case PowerUpType.SplatShield:
+        return 'Splat Shield';
+      case PowerUpType.SplashJump:
+        return 'Splash Jump';
       default:
         return 'Unknown';
     }
@@ -115,6 +121,12 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
         return '🎯';
       case PowerUpType.ShorterFuse:
         return '⏱️';
+      case PowerUpType.SpeedBoost:
+        return '🏃';
+      case PowerUpType.SplatShield:
+        return '🛡️';
+      case PowerUpType.SplashJump:
+        return '🦘';
       default:
         return '❓';
     }

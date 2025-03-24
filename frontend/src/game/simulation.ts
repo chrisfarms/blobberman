@@ -1,5 +1,5 @@
 import { GameTick, PlayerInput, Direction } from '@/types/shared';
-import { initializeRandom, random, randomChance, randomInt, willSpawnPowerUpAtPosition, getPowerUpTypeAtPosition } from '@/utils/random';
+import { initializeRandom, randomChance, randomInt, willSpawnPowerUpAtPosition, getPowerUpTypeAtPosition, random } from '@/utils/random';
 
 // Grid cell contents
 export type CellContent = 'empty' | 'wall' | 'breakableWall';
@@ -8,7 +8,10 @@ export type CellContent = 'empty' | 'wall' | 'breakableWall';
 export enum PowerUpType {
   ExtraBomb = 'extraBomb',         // Increases max bombs
   LongerSplat = 'longerSplat',     // Increases explosion range
-  ShorterFuse = 'shorterFuse'      // Debuff - reduces bomb timer
+  ShorterFuse = 'shorterFuse',     // Debuff - reduces bomb timer
+  SpeedBoost = 'speedBoost',       // Temporarily increases movement speed
+  SplatShield = 'splatShield',     // Prevents losing territory and power-ups when hit (temporary)
+  SplashJump = 'splashJump'        // Allows a short jump over one tile
 }
 
 // Grid cell state
@@ -71,6 +74,11 @@ export interface PlayerState {
   explosionSize: number; // How far explosions travel
   fuseMultiplier: number; // Multiplier for bomb fuse time (1.0 is normal, lower is faster)
   powerUps: PowerUpType[]; // Active power-ups this player has
+  speedMultiplier: number; // Multiplier for movement speed
+  speedBoostEndTick: number; // Tick when the speed boost ends
+  hasShield: boolean; // Whether the player has a shield
+  shieldEndTick: number; // Tick when the shield ends
+  canJump: boolean; // Whether the player can jump
 }
 
 const PLAYER_COLORS = [
@@ -84,7 +92,7 @@ const PLAYER_COLORS = [
   '#8800ff', // purple
 ];
 
-const GRID_SIZE = 20; // 20x20 grid
+const GRID_SIZE = 40; // Increased from 20 to 40 for a larger game board
 const BOMB_TIMER = 60; // 3 seconds at 20 ticks per second
 const EXPLOSION_DURATION = 20; // 1 second at 20 ticks per second
 const DEFAULT_GAME_SEED = 1234567890; // Default seed to use if no players
@@ -94,6 +102,7 @@ const POWERUP_SPAWN_CHANCE = 0.4; // 40% chance to spawn a power-up when a break
 const EXTRA_BOMB_MAX = 5; // Maximum number of bombs a player can have
 const LONGER_SPLAT_MAX = 6; // Maximum explosion size
 const SHORTER_FUSE_MIN = 0.5; // Minimum fuse time multiplier (50% of normal)
+const SPEED_BOOST_MAX = 1.3; // Maximum speed multiplier
 
 // Create a grid with walls and breakable walls
 function createInitialGrid(size: number): GridCell[][] {
@@ -108,13 +117,48 @@ function createInitialGrid(size: number): GridCell[][] {
       if (x === 0 || y === 0 || x === size - 1 || y === size - 1) {
         content = 'wall';
       }
-      // Create some internal walls in a grid pattern
-      else if (x % 4 === 0 && y % 4 === 0) {
+      // Create some internal walls in an expanded grid pattern
+      else if ((x % 6 === 0 && y % 6 === 0) || (x % 12 === 6 && y % 12 === 6)) {
         content = 'wall';
       }
-      // Add some breakable walls
-      else if ((x % 2 === 0 && y % 2 === 0) && randomChance(0.7)) {
-        content = 'breakableWall';
+      // Create a more interesting pattern of breakable walls
+      else {
+        // Different patterns in different regions of the map
+
+        // Larger open center area with very sparse breakables (15% chance)
+        const centerRadius = size / 3.5; // Increased from size/5 to size/3.5
+        const distFromCenter = Math.sqrt(Math.pow(x - size/2, 2) + Math.pow(y - size/2, 2));
+        if (distFromCenter < centerRadius) {
+          if (randomChance(0.15) && (x % 3 === 0 || y % 3 === 0)) { // Reduced from 0.25 to 0.15 and changed pattern
+            content = 'breakableWall';
+          }
+        }
+        // Dense area in the corners (80% chance)
+        else if (
+          (x < size / 4 && y < size / 4) ||
+          (x > 3 * size / 4 && y < size / 4) ||
+          (x < size / 4 && y > 3 * size / 4) ||
+          (x > 3 * size / 4 && y > 3 * size / 4)
+        ) {
+          if (randomChance(0.8) && (x % 3 !== 0 || y % 3 !== 0)) {
+            content = 'breakableWall';
+          }
+        }
+        // Diagonal pathways
+        else if (Math.abs(x - y) < 2 || Math.abs(x + y - size) < 2) {
+          // Keep these areas more open
+          if (randomChance(0.3)) {
+            content = 'breakableWall';
+          }
+        }
+        // Maze-like areas in the rest of the map
+        else if (((x % 3 === 0) !== (y % 3 === 0)) && randomChance(0.7)) {
+          content = 'breakableWall';
+        }
+        // Scattered breakable walls elsewhere
+        else if (randomChance(0.5)) {
+          content = 'breakableWall';
+        }
       }
 
       row.push({
@@ -128,17 +172,6 @@ function createInitialGrid(size: number): GridCell[][] {
   return grid;
 }
 
-// Generate seed from string (player ID)
-function generateSeedFromString(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash);
-}
-
 // Ensure the random is initialized with a consistent seed
 function ensureRandomInitialized(state: GameState, tick: GameTick): void {
   if (state.randomInitialized) {
@@ -148,14 +181,6 @@ function ensureRandomInitialized(state: GameState, tick: GameTick): void {
   // We need a consistent seed across all clients
   // Get the first player ID from the inputs or use a fixed default
   let seed = DEFAULT_GAME_SEED;
-
-//   if (tick.inputs.length > 0) {
-//     // Use the player ID with the lowest alphanumeric value to ensure consistency
-//     const sortedInputs = [...tick.inputs].sort((a, b) =>
-//       a.playerId.localeCompare(b.playerId)
-//     );
-//     seed = generateSeedFromString(sortedInputs[0].playerId);
-//   }
 
   // Initialize the deterministic random generator
   initializeRandom(seed);
@@ -463,42 +488,47 @@ function paintExplosionCells(state: GameState, explosion: Explosion): void {
 
 // Check if a player is hit by an explosion
 function checkPlayerHit(state: GameState): void {
-  const { players, explosions } = state;
+  for (const explosion of state.explosions) {
+    // Skip explosions that aren't in their first frame
+    if (state.tick - explosion.startedAt > 0) continue;
 
-  for (const [playerId, player] of players.entries()) {
-    // Skip hit detection for players who have no painted areas
-    const paintedCount = state.paintedCounts.get(playerId) || 0;
-    if (paintedCount === 0) continue;
+    // Check each arm of the explosion
+    const hitPositions = [
+      { x: explosion.x, y: explosion.y }, // Center of explosion
+      ...explosion.arms.map(arm => ({ x: arm.x, y: arm.y }))
+    ];
 
-    // Check if the player is in the explosion radius
-    for (const explosion of explosions) {
-      // Check center of explosion
+    for (const [playerId, player] of state.players.entries()) {
+      // Skip the player who created this explosion
+      if (playerId === explosion.playerId) continue;
+
+      // Convert player position to cell coordinates
       const playerCellX = Math.floor(player.x + state.gridSize / 2);
       const playerCellY = Math.floor(player.y + state.gridSize / 2);
-      const expCellX = Math.floor(explosion.x + state.gridSize / 2);
-      const expCellY = Math.floor(explosion.y + state.gridSize / 2);
 
-      if (playerCellX === expCellX && playerCellY === expCellY) {
-        // Player is hit, reset their painted areas
-        resetPlayerPaintedAreas(state, playerId);
-        break;
-      }
+      for (const position of hitPositions) {
+        const expCellX = Math.floor(position.x + state.gridSize / 2);
+        const expCellY = Math.floor(position.y + state.gridSize / 2);
 
-      // Check explosion arms
-      let hit = false;
-      for (const arm of explosion.arms) {
-        const armCellX = Math.floor(arm.x + state.gridSize / 2);
-        const armCellY = Math.floor(arm.y + state.gridSize / 2);
+        if (playerCellX === expCellX && playerCellY === expCellY) {
+          // Player was hit by an explosion!
 
-        if (playerCellX === armCellX && playerCellY === armCellY) {
-          // Player is hit, reset their painted areas
-          resetPlayerPaintedAreas(state, playerId);
-          hit = true;
+          // Check if player has a shield
+          if (player.hasShield) {
+            // Shield absorbs the hit but is consumed
+            player.hasShield = false;
+            player.shieldEndTick = 0;
+
+            // Remove the SplatShield power-up
+            player.powerUps = player.powerUps.filter(p => p !== PowerUpType.SplatShield);
+          } else {
+            // Reset all cells painted by this player
+            resetPlayerPaintedAreas(state, playerId);
+          }
+
           break;
         }
       }
-
-      if (hit) break;
     }
   }
 }
@@ -526,10 +556,20 @@ function resetPlayerPaintedAreas(state: GameState, playerId: string): void {
     player.explosionSize = 3;
     player.fuseMultiplier = 1.0;
     player.powerUps = []; // Clear all power-ups
+    player.speedMultiplier = 1.0;
+    player.speedBoostEndTick = 0;
+    player.hasShield = false;
+    player.shieldEndTick = 0;
+    player.canJump = false;
   }
 }
 
 export function processGameTick(currentState: GameState, tick: GameTick): GameState {
+  if (tick.tick < currentState.tick) {
+    console.warn(`Tick ${tick.tick} is less than current tick ${currentState.tick}`);
+    return currentState;
+  }
+
   // Create a new state object to avoid mutating the current state
   const newState: GameState = {
     players: new Map(currentState.players),
@@ -600,27 +640,138 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
       // Find a spawn point that's not a wall
       let spawnX = 0, spawnY = 0;
       let attempts = 0;
+      let foundSafeSpot = false;
 
-      while (attempts < 100) {
-        // Try random positions in the grid that are not too close to the edge
-        const x = randomInt(3, newState.gridSize - 3) - newState.gridSize/2;
-        const y = randomInt(3, newState.gridSize - 3) - newState.gridSize/2;
+      // Define center arena as the primary spawn area
+      const centerRadius = newState.gridSize / 3.5; // Match the open center area radius
 
-        console.log(`Spawn attempt ${attempts} for ${input.playerId}: position (${x}, ${y})`);
+      // Try to spawn in center first
+      while (attempts < 100 && !foundSafeSpot) {
+        // Generate random angle and distance within the center circle
+        const angle = random() * Math.PI * 2; // Use deterministic random() instead of Math.random()
+        // Use square root for distance to ensure even distribution
+        const distance = Math.sqrt(random()) * centerRadius * 0.7; // Use deterministic random() instead of Math.random()
 
-        // Check if position is valid
+        // Convert to cartesian coordinates
+        const x = Math.cos(angle) * distance;
+        const y = Math.sin(angle) * distance;
+
         if (canMoveTo(newState.grid, x, y)) {
-          spawnX = x;
-          spawnY = y;
-          console.log(`Player ${input.playerId} spawning at (${spawnX}, ${spawnY})`);
-          break;
+          // Check if too close to other players (use smaller distance in center)
+          let tooCloseToOtherPlayer = false;
+          const MIN_CENTER_DISTANCE = 3.5; // Smaller minimum distance for center area to encourage combat
+
+          for (const [_, otherPlayer] of newState.players.entries()) {
+            const distance = Math.sqrt(
+              Math.pow(x - otherPlayer.x, 2) +
+              Math.pow(y - otherPlayer.y, 2)
+            );
+
+            if (distance < MIN_CENTER_DISTANCE) {
+              tooCloseToOtherPlayer = true;
+              break;
+            }
+          }
+
+          if (!tooCloseToOtherPlayer) {
+            spawnX = x;
+            spawnY = y;
+            foundSafeSpot = true;
+            console.log(`Player ${input.playerId} spawning in center arena at (${spawnX.toFixed(2)}, ${spawnY.toFixed(2)})`);
+            break;
+          }
         }
 
         attempts++;
       }
 
-      if (attempts >= 100) {
-        console.warn(`Could not find spawn point for player ${input.playerId} after 100 attempts, using default position`);
+      // Fallback to other spawn areas if center spawning fails
+      if (!foundSafeSpot) {
+        console.log(`Could not spawn player ${input.playerId} in center, trying alternate areas`);
+
+        // Define alternate spawn areas (four quadrants)
+        const spawnAreas = [
+          // Top-left quadrant
+          {
+            minX: -newState.gridSize/2 + 4, maxX: -newState.gridSize/4,
+            minY: -newState.gridSize/2 + 4, maxY: -newState.gridSize/4
+          },
+          // Top-right quadrant
+          {
+            minX: newState.gridSize/4, maxX: newState.gridSize/2 - 4,
+            minY: -newState.gridSize/2 + 4, maxY: -newState.gridSize/4
+          },
+          // Bottom-left quadrant
+          {
+            minX: -newState.gridSize/2 + 4, maxX: -newState.gridSize/4,
+            minY: newState.gridSize/4, maxY: newState.gridSize/2 - 4
+          },
+          // Bottom-right quadrant
+          {
+            minX: newState.gridSize/4, maxX: newState.gridSize/2 - 4,
+            minY: newState.gridSize/4, maxY: newState.gridSize/2 - 4
+          }
+        ];
+
+        attempts = 0;
+        while (attempts < 100 && !foundSafeSpot) {
+          // Select a random spawn area
+          const spawnArea = spawnAreas[randomInt(0, spawnAreas.length - 1)];
+
+          // Try random positions in the selected spawn area
+          const x = randomInt(spawnArea.minX, spawnArea.maxX);
+          const y = randomInt(spawnArea.minY, spawnArea.maxY);
+
+          // Check if position is valid
+          if (canMoveTo(newState.grid, x, y)) {
+            // Check distance from other players to avoid spawning too close
+            let tooCloseToOtherPlayer = false;
+            const MIN_PLAYER_DISTANCE = 5; // Regular minimum distance for outer areas
+
+            for (const [_, otherPlayer] of newState.players.entries()) {
+              const distance = Math.sqrt(
+                Math.pow(x - otherPlayer.x, 2) +
+                Math.pow(y - otherPlayer.y, 2)
+              );
+
+              if (distance < MIN_PLAYER_DISTANCE) {
+                tooCloseToOtherPlayer = true;
+                break;
+              }
+            }
+
+            if (!tooCloseToOtherPlayer) {
+              spawnX = x;
+              spawnY = y;
+              foundSafeSpot = true;
+              console.log(`Player ${input.playerId} spawning in alternate area at (${spawnX}, ${spawnY})`);
+              break;
+            }
+          }
+
+          attempts++;
+        }
+      }
+
+      // Last resort fallback
+      if (!foundSafeSpot) {
+        console.warn(`Could not find optimal spawn point for player ${input.playerId}, using fallback position`);
+
+        // Fallback to a simple spawn algorithm
+        attempts = 0;
+        while (attempts < 50) {
+          // Try random positions in the grid that are not too close to the edge
+          const x = randomInt(3, newState.gridSize - 3) - newState.gridSize/2;
+          const y = randomInt(3, newState.gridSize - 3) - newState.gridSize/2;
+
+          if (canMoveTo(newState.grid, x, y)) {
+            spawnX = x;
+            spawnY = y;
+            break;
+          }
+
+          attempts++;
+        }
       }
 
       // New player, create initial state
@@ -634,7 +785,12 @@ export function processGameTick(currentState: GameState, tick: GameTick): GameSt
         maxBombs: 1,
         explosionSize: 3,
         fuseMultiplier: 1.0,
-        powerUps: []
+        powerUps: [],
+        speedMultiplier: 1.0,
+        speedBoostEndTick: 0,
+        hasShield: false,
+        shieldEndTick: 0,
+        canJump: false
       });
 
       // Initialize painted count
@@ -730,9 +886,12 @@ function spawnPowerUp(state: GameState, cellX: number, cellY: number): void {
 
   // Deterministically choose a power-up type based on position
   const powerUpTypes = [
-    PowerUpType.ShorterFuse,
     PowerUpType.ExtraBomb,
     PowerUpType.LongerSplat,
+    PowerUpType.ShorterFuse,
+    PowerUpType.SpeedBoost,
+    PowerUpType.SplatShield,
+    PowerUpType.SplashJump
   ];
 
   const powerUpType = getPowerUpTypeAtPosition(powerUpTypes, cellX, cellY);
@@ -851,5 +1010,132 @@ function applyPowerUp(state: GameState, player: PlayerState, powerUpType: PowerU
       // Reduce fuse time (this is a debuff)
       player.fuseMultiplier = Math.max(player.fuseMultiplier * 0.8, SHORTER_FUSE_MIN);
       break;
+
+    case PowerUpType.SpeedBoost:
+      // Increase movement speed
+      player.speedMultiplier = Math.min(player.speedMultiplier + 0.3, SPEED_BOOST_MAX);
+      player.speedBoostEndTick = state.tick + 300; // Speed boost lasts for ~5 seconds
+      break;
+
+    case PowerUpType.SplatShield:
+      // Give player a shield against explosions
+      player.hasShield = true;
+      player.shieldEndTick = state.tick + 600; // Shield lasts for ~10 seconds
+      break;
+
+    case PowerUpType.SplashJump:
+      // Allow player to jump over one tile
+      player.canJump = true;
+      break;
+  }
+}
+
+// Move a player based on their current input
+function movePlayer(state: GameState, playerId: string, input: PlayerInput): void {
+  const player = state.players.get(playerId);
+  if (!player) return;
+
+  // Get current player position
+  let { x, y } = player;
+
+  // Base movement speed
+  const baseSpeed = 0.15;
+
+  // Apply speed multiplier if player has speed boost
+  const speedMultiplier = player.speedMultiplier || 1.0;
+  const moveSpeed = baseSpeed * speedMultiplier;
+
+  // Check if player still has their power-ups
+  checkPowerUpExpiration(state, player);
+
+  // Handle movement direction
+  if (input.direction === 'up') {
+    // Try to move up
+    const newY = y - moveSpeed;
+    // Check if we're in jump mode
+    if (player.canJump && !canMoveTo(state.grid, x, newY)) {
+      // Try to jump over one tile
+      const jumpDistance = moveSpeed * 2;
+      if (canMoveTo(state.grid, x, y - jumpDistance)) {
+        y -= jumpDistance;
+        player.canJump = false; // Use up the jump power-up
+      }
+    } else if (canMoveTo(state.grid, x, newY)) {
+      y = newY;
+    }
+    player.lastDirection = 'up';
+  } else if (input.direction === 'down') {
+    // Try to move down
+    const newY = y + moveSpeed;
+    // Check if we're in jump mode
+    if (player.canJump && !canMoveTo(state.grid, x, newY)) {
+      // Try to jump over one tile
+      const jumpDistance = moveSpeed * 2;
+      if (canMoveTo(state.grid, x, y + jumpDistance)) {
+        y += jumpDistance;
+        player.canJump = false; // Use up the jump power-up
+      }
+    } else if (canMoveTo(state.grid, x, newY)) {
+      y = newY;
+    }
+    player.lastDirection = 'down';
+  } else if (input.direction === 'left') {
+    // Try to move left
+    const newX = x - moveSpeed;
+    // Check if we're in jump mode
+    if (player.canJump && !canMoveTo(state.grid, newX, y)) {
+      // Try to jump over one tile
+      const jumpDistance = moveSpeed * 2;
+      if (canMoveTo(state.grid, x - jumpDistance, y)) {
+        x -= jumpDistance;
+        player.canJump = false; // Use up the jump power-up
+      }
+    } else if (canMoveTo(state.grid, newX, y)) {
+      x = newX;
+    }
+    player.lastDirection = 'left';
+  } else if (input.direction === 'right') {
+    // Try to move right
+    const newX = x + moveSpeed;
+    // Check if we're in jump mode
+    if (player.canJump && !canMoveTo(state.grid, newX, y)) {
+      // Try to jump over one tile
+      const jumpDistance = moveSpeed * 2;
+      if (canMoveTo(state.grid, x + jumpDistance, y)) {
+        x += jumpDistance;
+        player.canJump = false; // Use up the jump power-up
+      }
+    } else if (canMoveTo(state.grid, newX, y)) {
+      x = newX;
+    }
+    player.lastDirection = 'right';
+  }
+
+  // Update player position
+  player.x = x;
+  player.y = y;
+
+  // Place a bomb if the bomb button is pressed
+  // This is handled by the main input processing function
+}
+
+// Check and expire temporary power-ups
+function checkPowerUpExpiration(state: GameState, player: PlayerState): void {
+  const { tick } = state;
+
+  // Check speed boost expiration
+  if (player.speedMultiplier > 1.0 && tick >= player.speedBoostEndTick) {
+    player.speedMultiplier = 1.0;
+
+    // Remove the power-up from the player's collection
+    player.powerUps = player.powerUps.filter(p => p !== PowerUpType.SpeedBoost);
+  }
+
+  // Check shield expiration
+  if (player.hasShield && tick >= player.shieldEndTick) {
+    player.hasShield = false;
+
+    // Remove the power-up from the player's collection
+    player.powerUps = player.powerUps.filter(p => p !== PowerUpType.SplatShield);
   }
 }

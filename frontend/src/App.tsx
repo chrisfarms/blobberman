@@ -82,13 +82,37 @@ function App() {
         }}
       >
         <color attach="background" args={['#f0f0f0']} />
-        <ambientLight intensity={0.5} />
+        <ambientLight intensity={0.6} />
+
+        {/* Main directional light for general illumination */}
         <directionalLight
-          position={[10, 10, 10]}
-          intensity={1}
+          position={[20, 30, 20]}
+          intensity={0.8}
+          castShadow
+          shadow-mapSize-width={2048}
+          shadow-mapSize-height={2048}
+          shadow-camera-left={-30}
+          shadow-camera-right={30}
+          shadow-camera-top={30}
+          shadow-camera-bottom={-30}
+        />
+
+        {/* Secondary light from the opposite direction to reduce harsh shadows */}
+        <directionalLight
+          position={[-20, 20, -20]}
+          intensity={0.4}
           castShadow
           shadow-mapSize-width={1024}
           shadow-mapSize-height={1024}
+          shadow-camera-left={-25}
+          shadow-camera-right={25}
+          shadow-camera-top={25}
+          shadow-camera-bottom={-25}
+        />
+
+        {/* Add a soft hemisphere light for ambient fill */}
+        <hemisphereLight
+          args={['#efefff', '#dddddd', 0.6]}
         />
 
         <GameScene gameState={gameState} />

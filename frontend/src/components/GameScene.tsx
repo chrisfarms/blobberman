@@ -19,7 +19,10 @@ const FLOOR_COLOR = '#aaaaaa';
 const POWER_UP_COLORS = {
   [PowerUpType.ExtraBomb]: '#ff5500',    // Orange-red
   [PowerUpType.LongerSplat]: '#00aaff',  // Light blue
-  [PowerUpType.ShorterFuse]: '#ffaa00'   // Amber
+  [PowerUpType.ShorterFuse]: '#ffaa00',  // Amber
+  [PowerUpType.SpeedBoost]: '#33cc33',   // Green
+  [PowerUpType.SplatShield]: '#9966ff',  // Purple
+  [PowerUpType.SplashJump]: '#ff33cc'    // Pink
 };
 
 // Constants for power-up spawning (matching those in simulation.ts)
@@ -116,6 +119,55 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
           <meshStandardMaterial color="black" />
         </mesh>
       </group>
+
+      {/* Shield effect when player has the shield power-up */}
+      {player.hasShield && (
+        <>
+          {/* Shield sphere */}
+          <mesh>
+            <sphereGeometry args={[0.7, 16, 16]} />
+            <meshStandardMaterial
+              color={POWER_UP_COLORS[PowerUpType.SplatShield]}
+              transparent
+              opacity={0.3}
+              emissive={POWER_UP_COLORS[PowerUpType.SplatShield]}
+              emissiveIntensity={0.5}
+            />
+          </mesh>
+          {/* Shield glow effect */}
+          <pointLight
+            color={POWER_UP_COLORS[PowerUpType.SplatShield]}
+            distance={1.5}
+            intensity={0.5}
+            position={[0, 0, 0]}
+          />
+        </>
+      )}
+
+      {/* Jump power-up indicator */}
+      {player.canJump && (
+        <mesh position={[0, -0.5, 0]}>
+          <coneGeometry args={[0.2, 0.4, 16]} />
+          <meshStandardMaterial
+            color={POWER_UP_COLORS[PowerUpType.SplashJump]}
+            emissive={POWER_UP_COLORS[PowerUpType.SplashJump]}
+            emissiveIntensity={0.5}
+          />
+        </mesh>
+      )}
+
+      {/* Speed boost effect */}
+      {player.speedMultiplier > 1.0 && (
+        <mesh position={[0, -0.3, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.6, 0.7, 16]} />
+          <meshBasicMaterial
+            color={POWER_UP_COLORS[PowerUpType.SpeedBoost]}
+            transparent
+            opacity={0.7}
+            side={2} // Double-sided
+          />
+        </mesh>
+      )}
     </group>
   );
 };
@@ -431,7 +483,10 @@ const GameScene = ({ gameState }: GameSceneProps) => {
             const powerUpTypes = [
               PowerUpType.ExtraBomb,
               PowerUpType.LongerSplat,
-              PowerUpType.ShorterFuse
+              PowerUpType.ShorterFuse,
+              PowerUpType.SpeedBoost,
+              PowerUpType.SplatShield,
+              PowerUpType.SplashJump
             ];
             predictedPowerUpType = getPowerUpTypeAtPosition(powerUpTypes, x, y);
           }
@@ -461,7 +516,11 @@ const GameScene = ({ gameState }: GameSceneProps) => {
                     pointerEvents: 'none'
                   }}>
                     {predictedPowerUpType === PowerUpType.ExtraBomb ? '💣' :
-                     predictedPowerUpType === PowerUpType.LongerSplat ? '🎯' : '⏱️'}
+                     predictedPowerUpType === PowerUpType.LongerSplat ? '🎯' :
+                     predictedPowerUpType === PowerUpType.ShorterFuse ? '⏱️' :
+                     predictedPowerUpType === PowerUpType.SpeedBoost ? '🏃' :
+                     predictedPowerUpType === PowerUpType.SplatShield ? '🛡️' :
+                     predictedPowerUpType === PowerUpType.SplashJump ? '🦘' : '❓'}
                   </div>
                 </Html>
               )}
@@ -520,8 +579,14 @@ const GameScene = ({ gameState }: GameSceneProps) => {
                 <sphereGeometry args={[0.25, 16, 16]} />
               ) : powerUp.type === PowerUpType.LongerSplat ? (
                 <cylinderGeometry args={[0.15, 0.25, 0.3, 16]} />
-              ) : (
+              ) : powerUp.type === PowerUpType.ShorterFuse ? (
                 <boxGeometry args={[0.3, 0.3, 0.3]} />
+              ) : powerUp.type === PowerUpType.SpeedBoost ? (
+                <torusGeometry args={[0.2, 0.08, 16, 32]} />
+              ) : powerUp.type === PowerUpType.SplatShield ? (
+                <dodecahedronGeometry args={[0.25, 0]} />
+              ) : (
+                <coneGeometry args={[0.2, 0.4, 16]} />
               )}
               <meshStandardMaterial
                 color={powerUpColor}

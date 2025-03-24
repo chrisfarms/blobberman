@@ -19,7 +19,7 @@ const lerpVector = (current: Vector3, target: Vector3, alpha: number, deltaTime:
 
 export default function PlayerCamera({ player, gridSize, explosions }: PlayerCameraProps) {
   const { camera } = useThree();
-  const targetPosition = useRef(new Vector3(0, 15, 5));
+  const targetPosition = useRef(new Vector3(0, 30, 10)); // Increased height and distance
   const currentLookAt = useRef(new Vector3(0, 0, 0));
   const targetLookAt = useRef(new Vector3(0, 0, 0));
 
@@ -30,16 +30,20 @@ export default function PlayerCamera({ player, gridSize, explosions }: PlayerCam
   const shakeRef = useRef({ intensity: 0, decay: 0.9 });
   const lastExplosionsLength = useRef(0);
 
+  // Calculate height and distance based on grid size
+  const cameraHeight = Math.max(25, gridSize * 0.75);
+  const cameraDistance = Math.max(8, gridSize * 0.25);
+
   useEffect(() => {
     // Set initial camera position to be above and slightly behind the camera target
     if (camera) {
-      camera.position.set(0, 15, 5);
+      camera.position.set(0, cameraHeight, cameraDistance);
       camera.lookAt(0, 0, 0);
 
       // Initialize our current look-at position
       currentLookAt.current.set(0, 0, 0);
     }
-  }, [camera]);
+  }, [camera, cameraHeight, cameraDistance]);
 
   useFrame(({ camera }, deltaTime) => {
     if (!player) return;
@@ -69,8 +73,8 @@ export default function PlayerCamera({ player, gridSize, explosions }: PlayerCam
 
     // Update target positions for the camera
     const cameraTargetX = worldX;
-    const cameraTargetY = 15; // Height above ground
-    const cameraTargetZ = worldZ + 5; // Distance behind player
+    const cameraTargetY = cameraHeight; // Height above ground
+    const cameraTargetZ = worldZ + cameraDistance; // Distance behind player
 
     // Set the target position for the camera
     targetPosition.current.set(cameraTargetX, cameraTargetY, cameraTargetZ);
