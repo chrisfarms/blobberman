@@ -1,30 +1,17 @@
 import { useRef, useMemo, useState, useEffect } from 'react';
 import { GridHelper, Group, Mesh, MeshStandardMaterial, Vector3, MeshPhysicalMaterial, Color, MathUtils, Object3D, InstancedMesh } from 'three';
-import { GameState, PowerUpType, Bomb, Explosion, PlayerState, GridCell } from '@/game/simulation';
+import { GameState, PlayerState, Bomb, Explosion, GridCell } from '@/game/simulation';
+import { PowerUpType } from '@/types/shared';
 import { Html } from '@react-three/drei';
 import { ENV } from '@/utils/env';
 import { willSpawnPowerUpAtPosition, getPowerUpTypeAtPosition } from '@/utils/random';
 import { useFrame } from '@react-three/fiber';
 import CustomRoundedBox, { InstancedRoundedBox } from './RoundedBox';
+import { WALL_COLOR, BREAKABLE_WALL_COLOR, FLOOR_COLOR, POWER_UP_COLORS, MATERIAL_PROPERTIES } from '../utils/colors';
 
 interface GameSceneProps {
   gameState: GameState;
 }
-
-// Colors for different cell types - using brighter, more vibrant colors for a toy-like feel
-const WALL_COLOR = '#666666';  // Slightly lighter gray
-const BREAKABLE_WALL_COLOR = '#c09458';  // Warmer, more saturated tan
-const FLOOR_COLOR = '#b0b0b0';  // Lighter gray
-
-// Colors for different power-up types - more saturated for toy-like appearance
-const POWER_UP_COLORS = {
-  [PowerUpType.ExtraBomb]: '#ff4400',     // Brighter orange-red
-  [PowerUpType.LongerSplat]: '#00ccff',   // Brighter blue
-  [PowerUpType.ShorterFuse]: '#ffaa00',   // Amber
-  [PowerUpType.SpeedBoost]: '#33dd44',    // Brighter green
-  [PowerUpType.SplatShield]: '#bb66ff',   // Brighter purple
-  [PowerUpType.SplashJump]: '#ff44dd'     // Brighter pink
-};
 
 // Constants for power-up spawning (matching those in simulation.ts)
 const POWERUP_SPAWN_CHANCE = 0.4; // 40% chance to spawn a power-up
@@ -140,12 +127,12 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
         <sphereGeometry args={[0.5, 16, 16]} />
         <meshPhysicalMaterial
           color={player.color}
-          roughness={0.1}
-          metalness={0.0}
-          clearcoat={1.0}
-          clearcoatRoughness={0.1}
-          reflectivity={0.8}
-          emissive={new Color(player.color).multiplyScalar(0.2)}
+          roughness={MATERIAL_PROPERTIES.STANDARD.ROUGHNESS}
+          metalness={MATERIAL_PROPERTIES.STANDARD.METALNESS}
+          clearcoat={MATERIAL_PROPERTIES.CLEAR_COAT.VALUE}
+          clearcoatRoughness={MATERIAL_PROPERTIES.CLEAR_COAT.ROUGHNESS}
+          reflectivity={MATERIAL_PROPERTIES.REFLECTIVITY}
+          emissive={new Color(player.color).multiplyScalar(MATERIAL_PROPERTIES.EMISSIVE_INTENSITY.LOW)}
         />
       </mesh>
 
@@ -158,10 +145,12 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
 
         // Calculate leg position based on character rotation
         const angle = targetRotationRef.current;
+        const cosAngle = Math.cos(angle);
+        const sinAngle = Math.sin(angle);
 
         // Apply rotation matrix to original position
-        const offsetX = pos.x ;//* cosAngle - pos.z * sinAngle;
-        const offsetZ = pos.z ;//* sinAngle + pos.z * cosAngle;
+        const offsetX = pos.x;
+        const offsetZ = legPhase * 0.05 - 0.2;
 
         return (
           <group
@@ -178,11 +167,11 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
               <sphereGeometry args={[0.22, 8, 8]} />
               <meshPhysicalMaterial
                 color={player.color}
-                roughness={0.3}
-                metalness={0.0}
-                clearcoat={1.0}
-                clearcoatRoughness={0.3}
-                reflectivity={0.4}
+          roughness={MATERIAL_PROPERTIES.STANDARD.ROUGHNESS}
+          metalness={MATERIAL_PROPERTIES.STANDARD.METALNESS}
+          clearcoat={MATERIAL_PROPERTIES.CLEAR_COAT.VALUE}
+          clearcoatRoughness={MATERIAL_PROPERTIES.CLEAR_COAT.ROUGHNESS}
+          reflectivity={MATERIAL_PROPERTIES.REFLECTIVITY}
               />
             </mesh>
           </group>

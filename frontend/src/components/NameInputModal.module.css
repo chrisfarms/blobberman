@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.8);
+  background-color: var(--modal-background);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -13,28 +13,28 @@
 }
 
 .modalContent {
-  background-color: rgba(0, 0, 0, 0.9);
+  background-color: var(--modal-content-background);
   border-radius: 16px;
   padding: 30px;
   width: 90%;
   max-width: 400px;
-  color: white;
+  color: var(--modal-text);
   text-align: center;
-  box-shadow: 0 0 30px rgba(255, 204, 0, 0.3);
-  border: 1px solid rgba(255, 204, 0, 0.2);
+  box-shadow: 0 0 30px var(--modal-shadow);
+  border: 1px solid var(--modal-border);
 }
 
 .modalContent h2 {
-  color: #ffcc00;
+  color: var(--header-text);
   margin: 0 0 20px 0;
   font-size: 28px;
-  text-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
+  text-shadow: 0 0 10px var(--text-shadow);
 }
 
 .modalContent p {
   margin: 0 0 25px 0;
   font-size: 16px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--subtext);
 }
 
 .nameForm {
@@ -46,9 +46,9 @@
 .nameInput {
   padding: 12px 15px;
   border-radius: 8px;
-  border: 2px solid rgba(255, 204, 0, 0.5);
-  background-color: rgba(0, 0, 0, 0.3);
-  color: white;
+  border: 2px solid var(--input-border);
+  background-color: var(--input-background);
+  color: var(--input-text);
   font-size: 16px;
   text-align: center;
   outline: none;
@@ -56,19 +56,19 @@
 }
 
 .nameInput:focus {
-  border-color: #ffcc00;
-  box-shadow: 0 0 10px rgba(255, 204, 0, 0.3);
+  border-color: var(--input-focus-border);
+  box-shadow: 0 0 10px var(--input-focus-shadow);
 }
 
 .errorMessage {
-  color: #ff5252;
+  color: var(--error-text);
   font-size: 14px;
   margin-top: -5px;
 }
 
 .submitButton {
-  background-color: #ffcc00;
-  color: #000;
+  background-color: var(--button-background);
+  color: var(--button-text);
   border: none;
   border-radius: 8px;
   padding: 12px;
@@ -80,7 +80,7 @@
 }
 
 .submitButton:hover {
-  background-color: #ffd740;
+  background-color: var(--button-hover-background);
 }
 
 .submitButton:active {
@@ -93,8 +93,8 @@
 }
 
 .randomButton {
-  background-color: #444;
-  color: white;
+  background-color: var(--disabled-button-background);
+  color: var(--disabled-button-text);
   border: none;
   border-radius: 8px;
   padding: 12px;
@@ -105,7 +105,7 @@
 }
 
 .randomButton:hover {
-  background-color: #555;
+  background-color: var(--disabled-button-hover-background);
 }
 
 .randomButton:active {

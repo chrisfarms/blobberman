@@ -1,18 +1,9 @@
-import { GameTick, Direction } from '@/types/shared';
+import { GameTick, Direction, PowerUpType } from '@/types/shared';
 import { initializeRandom, randomChance, randomInt, willSpawnPowerUpAtPosition, getPowerUpTypeAtPosition, random } from '@/utils/random';
+import { PLAYER_COLORS } from '../utils/colors';
 
 // Grid cell contents
 export type CellContent = 'empty' | 'wall' | 'breakableWall';
-
-// Power-up types
-export enum PowerUpType {
-  ExtraBomb = 'extraBomb',         // Increases max bombs
-  LongerSplat = 'longerSplat',     // Increases explosion range
-  ShorterFuse = 'shorterFuse',     // Debuff - reduces bomb timer
-  SpeedBoost = 'speedBoost',       // Temporarily increases movement speed
-  SplatShield = 'splatShield',     // Prevents losing territory and power-ups when hit (temporary)
-  SplashJump = 'splashJump'        // Allows a short jump over one tile
-}
 
 // Grid cell state
 export interface GridCell {
@@ -81,17 +72,6 @@ export interface PlayerState {
   canJump: boolean; // Whether the player can jump
   diagonalDirection: string | null; // Track diagonal movement for rendering
 }
-
-const PLAYER_COLORS = [
-  '#ff0000', // red
-  '#00ff00', // green
-  '#0000ff', // blue
-  '#ffff00', // yellow
-  '#ff00ff', // magenta
-  '#00ffff', // cyan
-  '#ff8800', // orange
-  '#8800ff', // purple
-];
 
 const GRID_SIZE = 40; // Increased from 20 to 40 for a larger game board
 const BOMB_TIMER = 60; // 3 seconds at 20 ticks per second

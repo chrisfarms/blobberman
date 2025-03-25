@@ -1,0 +1,46 @@
+:root {
+  /* UI Colors */
+  --modal-background: rgba(0, 0, 0, 0.8);
+  --modal-content-background: rgba(0, 0, 0, 0.9);
+  --modal-text: white;
+  --modal-shadow: rgba(255, 204, 0, 0.3);
+  --modal-border: rgba(255, 204, 0, 0.2);
+  --header-text: #ffcc00;
+  --text-shadow: rgba(255, 204, 0, 0.5);
+  --subtext: rgba(255, 255, 255, 0.8);
+  --input-border: rgba(255, 204, 0, 0.5);
+  --input-background: rgba(0, 0, 0, 0.3);
+  --input-text: white;
+  --input-focus-border: #ffcc00;
+  --input-focus-shadow: rgba(255, 204, 0, 0.3);
+  --error-text: #ff5252;
+  --button-background: #ffcc00;
+  --button-text: #000;
+  --button-hover-background: #ffd740;
+  --disabled-button-background: #444;
+  --disabled-button-text: white;
+  --disabled-button-hover-background: #555;
+
+  /* Game World Colors */
+  --wall-color: #666666;
+  --breakable-wall-color: #c09458;
+  --floor-color: #b0b0b0;
+
+  /* Player Colors */
+  --player-red: #ff0000;
+  --player-green: #00ff00;
+  --player-blue: #0000ff;
+  --player-yellow: #ffff00;
+  --player-magenta: #ff00ff;
+  --player-cyan: #00ffff;
+  --player-orange: #ff8800;
+  --player-purple: #8800ff;
+
+  /* PowerUp Colors */
+  --powerup-extra-bomb: #ff4400;
+  --powerup-longer-splat: #00ccff;
+  --powerup-shorter-fuse: #ffaa00;
+  --powerup-speed-boost: #33dd44;
+  --powerup-splat-shield: #bb66ff;
+  --powerup-splash-jump: #ff44dd;
+}

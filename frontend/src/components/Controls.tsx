@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import nipplejs, { JoystickManager, JoystickOutputData, EventData } from 'nipplejs';
 import styles from './Controls.module.css';
+import { UI_COLORS } from '../utils/colors';
 
 interface ControlsProps {
   onControlsChange: (directionalInput: {up: boolean, down: boolean, left: boolean, right: boolean}, isPlacingBlob: boolean) => void;
@@ -44,7 +45,7 @@ const Controls = ({ onControlsChange }: ControlsProps) => {
       position: isMobile || true
         ? { left: '100px', bottom: '120px' }
         : { left: '50%', bottom: '80px' },
-      color: 'rgba(255, 100, 200, 0.6)',
+      color: UI_COLORS.BUTTON_BACKGROUND + '99', // Using the button background color with 60% opacity (99 in hex)
       size: isMobile ? 100 : 120,
     });
 

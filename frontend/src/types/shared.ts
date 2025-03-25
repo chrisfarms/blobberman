@@ -17,6 +17,16 @@ export interface GameTick {
   inputs: PlayerInput[];
 }
 
+// Power-up types
+export enum PowerUpType {
+  ExtraBomb = 'extraBomb',         // Increases max bombs
+  LongerSplat = 'longerSplat',     // Increases explosion range
+  ShorterFuse = 'shorterFuse',     // Debuff - reduces bomb timer
+  SpeedBoost = 'speedBoost',       // Temporarily increases movement speed
+  SplatShield = 'splatShield',     // Prevents losing territory and power-ups when hit (temporary)
+  SplashJump = 'splashJump'        // Allows a short jump over one tile
+}
+
 // Message Types
 export type MessageType = 'connect' | 'input' | 'tick' | 'historySync';
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { GameState, PowerUpType } from '@/game/simulation';
+import { GameState } from '@/game/simulation';
+import { PowerUpType } from '@/types/shared';
 import styles from './HUD.module.css';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
@@ -11,7 +12,6 @@ const HUD: React.FC<HUDProps> = ({ gameState }) => {
   const {
     playerId,
     displayName,
-    connectionState,
     resetCountdown,
     playerDisplayNames,
     setDisplayName,
