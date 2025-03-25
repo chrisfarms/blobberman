@@ -1,5 +1,7 @@
-import { Instance, Instances, RoundedBox as DreiRoundedBox } from '@react-three/drei';
-import { useMemo } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
+import { BoxGeometry, MeshPhysicalMaterial, Mesh, Color, InstancedMesh, Object3D, Matrix4, BufferAttribute, Float32BufferAttribute, BufferGeometry } from 'three';
+import { useFrame } from '@react-three/fiber';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 // Properties for our RoundedBox wrapper component
 export type CustomRoundedBoxProps = {
@@ -49,31 +51,38 @@ export const CustomRoundedBox: React.FC<CustomRoundedBoxProps> = ({
   children,
   ...props
 }) => {
+  // Create the geometry once
+  const geometry = useMemo(() => {
+    return new RoundedBoxGeometry(width, height, depth, segments, radius);
+  }, [width, height, depth, segments, radius]);
+
+  // Create the material once
+  const material = useMemo(() => {
+    return new MeshPhysicalMaterial({
+      color,
+      roughness,
+      metalness,
+      clearcoat,
+      clearcoatRoughness,
+      reflectivity,
+      transparent,
+      opacity,
+      emissive: emissive ? new Color(emissive) : undefined,
+      emissiveIntensity: emissive ? emissiveIntensity : 0
+    });
+  }, [color, roughness, metalness, clearcoat, clearcoatRoughness, reflectivity, transparent, opacity, emissive, emissiveIntensity]);
+
   return (
-    <DreiRoundedBox
-      args={[width, height, depth]}
-      radius={radius}
-      smoothness={segments}
-      castShadow={castShadow}
-      receiveShadow={receiveShadow}
+    <mesh
+      geometry={geometry}
+      material={material}
       position={position}
       rotation={rotation}
-      {...props}
+      castShadow={castShadow}
+      receiveShadow={receiveShadow}
     >
-      <meshPhysicalMaterial
-        color={color}
-        roughness={roughness}
-        metalness={metalness}
-        clearcoat={clearcoat}
-        clearcoatRoughness={clearcoatRoughness}
-        reflectivity={reflectivity}
-        emissive={emissive}
-        emissiveIntensity={emissiveIntensity}
-        transparent={transparent}
-        opacity={opacity}
-      />
       {children}
-    </DreiRoundedBox>
+    </mesh>
   );
 };
 
@@ -110,21 +119,22 @@ export const CustomRoundedBoxInstances: React.FC<CustomRoundedBoxInstancesProps>
   children
 }) => {
   return (
-    <Instances
-      limit={count}
+    <instancedMesh
+      args={[
+        new RoundedBoxGeometry(width, height, depth, segments, radius),
+        new MeshPhysicalMaterial({
+          color,
+          roughness,
+          metalness,
+          clearcoat,
+          clearcoatRoughness,
+          reflectivity
+        }),
+        count
+      ]}
     >
-      <DreiRoundedBox args={[width, height, depth]} radius={radius} smoothness={segments}>
-        <meshPhysicalMaterial
-          color={color}
-          roughness={roughness}
-          metalness={metalness}
-          clearcoat={clearcoat}
-          clearcoatRoughness={clearcoatRoughness}
-          reflectivity={reflectivity}
-        />
-      </DreiRoundedBox>
       {children}
-    </Instances>
+    </instancedMesh>
   );
 };
 
@@ -160,11 +170,139 @@ export const CustomRoundedBoxInstance: React.FC<CustomRoundedBoxInstanceProps> =
   }, [scale, height]);
 
   return (
-    <Instance
+    <mesh
       position={position}
       rotation={rotation}
       scale={actualScale}
-      color={color}
+    >
+      <meshPhysicalMaterial color={color} />
+    </mesh>
+  );
+};
+
+interface InstancedRoundedBoxProps {
+  count: number;
+  positions: Float32Array;
+  scales?: Float32Array;
+  colors?: Float32Array;
+  color?: string;
+  width?: number;
+  height?: number;
+  depth?: number;
+  radius?: number;
+  segments?: number;
+  roughness?: number;
+  metalness?: number;
+  clearcoat?: number;
+  clearcoatRoughness?: number;
+  reflectivity?: number;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  updateMatrices?: (mesh: InstancedMesh) => void;
+}
+
+export const InstancedRoundedBox: React.FC<InstancedRoundedBoxProps> = ({
+  count,
+  positions,
+  scales,
+  colors,
+  color = 'white',
+  width = 1,
+  height = 1,
+  depth = 1,
+  radius = 0.05,
+  segments = 2,
+  roughness = 0.5,
+  metalness = 0.1,
+  clearcoat = 0.0,
+  clearcoatRoughness = 0.0,
+  reflectivity = 0.5,
+  castShadow = false,
+  receiveShadow = false,
+  updateMatrices
+}) => {
+  const meshRef = useRef<InstancedMesh>(null);
+  const dummyObj = useMemo(() => new Object3D(), []);
+  const colorsRef = useRef<Float32Array | null>(null);
+
+  // Create the geometry once
+  const geometry = useMemo(() => {
+    return new RoundedBoxGeometry(width, height, depth, segments, radius);
+  }, [width, height, depth, segments, radius]);
+
+  // Create the material once
+  const material = useMemo(() => {
+    // If colors array is provided, use vertexColors, otherwise use a single color
+    if (colors) {
+      return new MeshPhysicalMaterial({
+        roughness,
+        metalness,
+        clearcoat,
+        clearcoatRoughness,
+        reflectivity
+      });
+    } else {
+      return new MeshPhysicalMaterial({
+        color,
+        roughness,
+        metalness,
+        clearcoat,
+        clearcoatRoughness,
+        reflectivity
+      });
+    }
+  }, [roughness, metalness, clearcoat, clearcoatRoughness, reflectivity, colors, color]);
+
+  useEffect(() => {
+    // Store colors reference and set up instanceColor if colors are provided
+    if (meshRef.current && colors) {
+      colorsRef.current = colors;
+      meshRef.current.instanceColor = new BufferAttribute(colors, 3) as any;
+    }
+  }, [colors]);
+
+  // Set up matrices and colors
+  useFrame(() => {
+    if (!meshRef.current) return;
+
+    if (updateMatrices) {
+      // Use custom matrix update function if provided
+      updateMatrices(meshRef.current);
+    } else {
+      // Default matrix update based on positions and scales
+      for (let i = 0; i < count; i++) {
+        const idx = i * 3;
+
+        // Position
+        dummyObj.position.set(
+          positions[idx],
+          positions[idx + 1],
+          positions[idx + 2]
+        );
+
+        // Scale (if provided)
+        if (scales) {
+          dummyObj.scale.set(
+            scales[idx],
+            scales[idx + 1],
+            scales[idx + 2]
+          );
+        }
+
+        dummyObj.updateMatrix();
+        meshRef.current.setMatrixAt(i, dummyObj.matrix);
+      }
+
+      meshRef.current.instanceMatrix.needsUpdate = true;
+    }
+  });
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[geometry, material, count]}
+      castShadow={castShadow}
+      receiveShadow={receiveShadow}
     />
   );
 };

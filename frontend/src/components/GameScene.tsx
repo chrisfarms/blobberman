@@ -1,11 +1,11 @@
 import { useRef, useMemo, useState, useEffect } from 'react';
-import { GridHelper, Group, Mesh, MeshStandardMaterial, Vector3, MeshPhysicalMaterial, Color, MathUtils } from 'three';
+import { GridHelper, Group, Mesh, MeshStandardMaterial, Vector3, MeshPhysicalMaterial, Color, MathUtils, Object3D, InstancedMesh } from 'three';
 import { GameState, PowerUpType, Bomb, Explosion, PlayerState, GridCell } from '@/game/simulation';
 import { Html } from '@react-three/drei';
 import { ENV } from '@/utils/env';
 import { willSpawnPowerUpAtPosition, getPowerUpTypeAtPosition } from '@/utils/random';
 import { useFrame } from '@react-three/fiber';
-import CustomRoundedBox from './RoundedBox';
+import CustomRoundedBox, { InstancedRoundedBox } from './RoundedBox';
 
 interface GameSceneProps {
   gameState: GameState;
@@ -536,12 +536,133 @@ const getBreakableWallHeight = (x: number, y: number): number => {
   return baseHeight + variation;
 };
 
+// Add this new function for batching similar grid cells
+interface CellInstance {
+  posX: number;
+  posY: number;
+  posZ: number;
+  height: number;
+  color: string;
+  castShadow: boolean;
+}
+
 const GameScene = ({ gameState }: GameSceneProps) => {
   const gridRef = useRef<GridHelper>(null);
+  const wallInstancesRef = useRef<Object3D>(new Object3D());
+  const breakableWallInstancesRef = useRef<Object3D>(new Object3D());
+  const floorInstancesRef = useRef<Object3D>(new Object3D());
 
   // Track wall destruction animations
   const [destroyedWalls, setDestroyedWalls] = useState<{x: number, y: number, gridX: number, gridY: number, tick: number}[]>([]);
   const lastGridRef = useRef<GridCell[][]>(gameState.grid);
+
+  // Group cells by type for instancing
+  const { wallCells, breakableWallCells, floorCells } = useMemo(() => {
+    const walls: CellInstance[] = [];
+    const breakableWalls: CellInstance[] = [];
+    const floors: CellInstance[] = [];
+
+    gameState.grid.forEach((row, y) => {
+      row.forEach((cell, x) => {
+        // Calculate position in 3D space
+        const posX = x - gameState.gridSize / 2 + 0.5;
+        const posZ = y - gameState.gridSize / 2 + 0.5;
+        let posY = 0;
+        let cellColor = FLOOR_COLOR;
+        let cellHeight = 0.1;
+        let castShadow = false;
+
+        if (cell.content === 'wall') {
+          cellColor = WALL_COLOR;
+          cellHeight = 1;
+          castShadow = true;
+          walls.push({
+            posX,
+            posY: posY + cellHeight / 2,
+            posZ,
+            height: cellHeight,
+            color: cellColor,
+            castShadow
+          });
+        } else if (cell.content === 'breakableWall') {
+          cellColor = BREAKABLE_WALL_COLOR;
+          cellHeight = getBreakableWallHeight(x, y);
+          castShadow = true;
+          breakableWalls.push({
+            posX,
+            posY: posY + cellHeight / 2,
+            posZ,
+            height: cellHeight,
+            color: cellColor,
+            castShadow
+          });
+        } else {
+          if (cell.paintedBy) {
+            // If painted, use player's color
+            const player = gameState.players.get(cell.paintedBy);
+            if (player) {
+              cellColor = player.color;
+            }
+          }
+          floors.push({
+            posX,
+            posY: posY + cellHeight / 2,
+            posZ,
+            height: cellHeight,
+            color: cellColor,
+            castShadow
+          });
+        }
+      });
+    });
+
+    return {
+      wallCells: walls,
+      breakableWallCells: breakableWalls,
+      floorCells: floors
+    };
+  }, [gameState.grid, gameState.gridSize, gameState.players]);
+
+  // Setup instancing for walls
+  const { wallPositions, wallScales } = useMemo(() => {
+    const positions = new Float32Array(wallCells.length * 3);
+    const scales = new Float32Array(wallCells.length * 3);
+
+    wallCells.forEach((cell, i) => {
+      const idx = i * 3;
+      positions[idx] = cell.posX;
+      positions[idx + 1] = cell.posY;
+      positions[idx + 2] = cell.posZ;
+
+      scales[idx] = 0.95;
+      scales[idx + 1] = cell.height;
+      scales[idx + 2] = 0.95;
+    });
+
+    return { wallPositions: positions, wallScales: scales };
+  }, [wallCells]);
+
+  // Setup instancing for breakable walls
+  const { breakableWallPositions, breakableWallScales } = useMemo(() => {
+    const positions = new Float32Array(breakableWallCells.length * 3);
+    const scales = new Float32Array(breakableWallCells.length * 3);
+
+    breakableWallCells.forEach((cell, i) => {
+      const idx = i * 3;
+      positions[idx] = cell.posX;
+      positions[idx + 1] = cell.posY;
+      positions[idx + 2] = cell.posZ;
+
+      scales[idx] = 0.95;
+      scales[idx + 1] = cell.height;
+      scales[idx + 2] = 0.95;
+    });
+
+    return {
+      breakableWallPositions: positions,
+      breakableWallScales: scales
+    };
+  }, [breakableWallCells]);
 
   // Check for newly destroyed walls by comparing current grid with previous grid
   useEffect(() => {
@@ -600,96 +721,184 @@ const GameScene = ({ gameState }: GameSceneProps) => {
         position={[0, 0.01, 0]}
       />
 
-      {/* Render grid cells */}
-      {gameState.grid.map((row, y) =>
+      {/* Render walls using instancing */}
+      {wallCells.length > 0 && (
+        <InstancedRoundedBox
+          count={wallCells.length}
+          positions={wallPositions}
+          scales={wallScales}
+          width={1}
+          height={1}
+          depth={1}
+          radius={0.05}
+          segments={2}
+          roughness={0.2}
+          metalness={0.1}
+          clearcoat={0.8}
+          clearcoatRoughness={0.2}
+          reflectivity={0.5}
+          castShadow
+          receiveShadow
+          color={WALL_COLOR}
+        />
+      )}
+
+      {/* Render breakable walls using instancing */}
+      {breakableWallCells.length > 0 && (
+        <InstancedRoundedBox
+          count={breakableWallCells.length}
+          positions={breakableWallPositions}
+          scales={breakableWallScales}
+          width={1}
+          height={1}
+          depth={1}
+          radius={0.05}
+          segments={2}
+          roughness={0.2}
+          metalness={0.1}
+          clearcoat={0.8}
+          clearcoatRoughness={0.2}
+          reflectivity={0.5}
+          castShadow
+          receiveShadow
+          color={BREAKABLE_WALL_COLOR}
+        />
+      )}
+
+      {/* Render floor cells by grouping by color */}
+      {gameState.players.size > 0 && Array.from(gameState.players.values()).map(player => {
+        // Filter floor cells by this player's color
+        const playerFloorCells = floorCells.filter(cell => cell.color === player.color);
+
+        if (playerFloorCells.length === 0) return null;
+
+        // Create positions and scales for this player's floor cells
+        const positions = new Float32Array(playerFloorCells.length * 3);
+        const scales = new Float32Array(playerFloorCells.length * 3);
+
+        playerFloorCells.forEach((cell, i) => {
+          const idx = i * 3;
+          positions[idx] = cell.posX;
+          positions[idx + 1] = cell.posY;
+          positions[idx + 2] = cell.posZ;
+
+          scales[idx] = 0.95;
+          scales[idx + 1] = cell.height;
+          scales[idx + 2] = 0.95;
+        });
+
+        return (
+          <InstancedRoundedBox
+            key={`floor-${player.playerId}`}
+            count={playerFloorCells.length}
+            positions={positions}
+            scales={scales}
+            width={1}
+            height={1}
+            depth={1}
+            radius={0.05}
+            segments={2}
+            roughness={0.2}
+            metalness={0.1}
+            clearcoat={0.8}
+            clearcoatRoughness={0.2}
+            reflectivity={0.5}
+            receiveShadow
+            color={player.color}
+          />
+        );
+      })}
+
+      {/* Render unpainted floor cells */}
+      {(() => {
+        // Filter floor cells that are unpainted (default floor color)
+        const unpaintedFloorCells = floorCells.filter(cell => cell.color === FLOOR_COLOR);
+
+        if (unpaintedFloorCells.length === 0) return null;
+
+        // Create positions and scales for unpainted floor cells
+        const positions = new Float32Array(unpaintedFloorCells.length * 3);
+        const scales = new Float32Array(unpaintedFloorCells.length * 3);
+
+        unpaintedFloorCells.forEach((cell, i) => {
+          const idx = i * 3;
+          positions[idx] = cell.posX;
+          positions[idx + 1] = cell.posY;
+          positions[idx + 2] = cell.posZ;
+
+          scales[idx] = 0.95;
+          scales[idx + 1] = cell.height;
+          scales[idx + 2] = 0.95;
+        });
+
+        return (
+          <InstancedRoundedBox
+            count={unpaintedFloorCells.length}
+            positions={positions}
+            scales={scales}
+            width={1}
+            height={1}
+            depth={1}
+            radius={0.05}
+            segments={2}
+            roughness={0.2}
+            metalness={0.1}
+            clearcoat={0.8}
+            clearcoatRoughness={0.2}
+            reflectivity={0.5}
+            receiveShadow
+            color={FLOOR_COLOR}
+          />
+        );
+      })()}
+
+      {/* Render dev mode power-up indicators */}
+      {ENV.DEV_MODE && gameState.grid.map((row, y) =>
         row.map((cell, x) => {
-          // Calculate position in 3D space
+          if (cell.content !== 'breakableWall') return null;
+
           const posX = x - gameState.gridSize / 2 + 0.5;
-          const posY = 0;
           const posZ = y - gameState.gridSize / 2 + 0.5;
+          const cellHeight = getBreakableWallHeight(x, y);
 
-          // Determine cell color based on content and paint
-          let cellColor = FLOOR_COLOR;
-          let cellHeight = 0.1;  // Regular floor height
+          const wouldSpawnPowerUp = willSpawnPowerUpAtPosition(POWERUP_SPAWN_CHANCE, x, y);
+          if (!wouldSpawnPowerUp) return null;
 
-          if (cell.content === 'wall') {
-            cellColor = WALL_COLOR;
-            cellHeight = 1;  // Wall height
-          } else if (cell.content === 'breakableWall') {
-            cellColor = BREAKABLE_WALL_COLOR;
-            // Use our deterministic function to get varying heights
-            cellHeight = getBreakableWallHeight(x, y);
-          } else if (cell.paintedBy) {
-            // If painted, use player's color
-            const player = gameState.players.get(cell.paintedBy);
-            if (player) {
-              cellColor = player.color;
-            }
-          }
-
-          // For dev mode: Deterministically predict if this breakable wall would spawn a power-up
-          // This should use the same logic as in spawnPowerUp function in simulation.ts
-          const wouldSpawnPowerUp = cell.content === 'breakableWall' &&
-            willSpawnPowerUpAtPosition(POWERUP_SPAWN_CHANCE, x, y);
-
-          // Choose a power-up type deterministically (matching the logic in spawnPowerUp)
-          let predictedPowerUpType = null;
-          if (wouldSpawnPowerUp) {
-            const powerUpTypes = [
-              PowerUpType.ExtraBomb,
-              PowerUpType.LongerSplat,
-              PowerUpType.ShorterFuse,
-              PowerUpType.SpeedBoost,
-              PowerUpType.SplatShield,
-              PowerUpType.SplashJump
-            ];
-            predictedPowerUpType = getPowerUpTypeAtPosition(powerUpTypes, x, y);
-          }
+          const predictedPowerUpType = getPowerUpTypeAtPosition([
+            PowerUpType.ExtraBomb,
+            PowerUpType.LongerSplat,
+            PowerUpType.ShorterFuse,
+            PowerUpType.SpeedBoost,
+            PowerUpType.SplatShield,
+            PowerUpType.SplashJump
+          ], x, y);
 
           return (
-            <CustomRoundedBox
-              key={`cell-${x}-${y}`}
-              position={[posX, posY + cellHeight / 2, posZ]}
-              width={0.95}
-              height={cellHeight}
-              depth={0.95}
-              radius={0.05}
-              segments={2}
-              castShadow={cell.content !== 'empty'}
-              receiveShadow
-              color={cellColor}
-              roughness={0.2}
-              metalness={0.1}
-              clearcoat={0.8}
-              clearcoatRoughness={0.2}
-              reflectivity={0.5}
-              emissive={cell.content !== 'empty' ? cellColor : undefined}
-              emissiveIntensity={cell.content !== 'empty' ? 0.15 : 0}
+            <Html
+              key={`powerup-indicator-${x}-${y}`}
+              position={[posX, cellHeight + 0.5, posZ]}
+              center
+              zIndexRange={[1, 10]}
             >
-              {/* Dev mode power-up indicator */}
-              {ENV.DEV_MODE && wouldSpawnPowerUp && predictedPowerUpType && (
-                <Html position={[0, cellHeight/2 + 0.5, 0]} center zIndexRange={[1, 10]}>
-                  <div style={{
-                    background: POWER_UP_COLORS[predictedPowerUpType],
-                    color: 'white',
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    fontSize: '10px',
-                    fontWeight: 'bold',
-                    boxShadow: '0 0 3px rgba(0,0,0,0.5)',
-                    opacity: '0.8',
-                    pointerEvents: 'none'
-                  }}>
-                    {predictedPowerUpType === PowerUpType.ExtraBomb ? '💣' :
-                     predictedPowerUpType === PowerUpType.LongerSplat ? '🎯' :
-                     predictedPowerUpType === PowerUpType.ShorterFuse ? '⏱️' :
-                     predictedPowerUpType === PowerUpType.SpeedBoost ? '🏃' :
-                     predictedPowerUpType === PowerUpType.SplatShield ? '🛡️' :
-                     predictedPowerUpType === PowerUpType.SplashJump ? '🦘' : '❓'}
-                  </div>
-                </Html>
-              )}
-            </CustomRoundedBox>
+              <div style={{
+                background: POWER_UP_COLORS[predictedPowerUpType],
+                color: 'white',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '10px',
+                fontWeight: 'bold',
+                boxShadow: '0 0 3px rgba(0,0,0,0.5)',
+                opacity: '0.8',
+                pointerEvents: 'none'
+              }}>
+                {predictedPowerUpType === PowerUpType.ExtraBomb ? '💣' :
+                 predictedPowerUpType === PowerUpType.LongerSplat ? '🎯' :
+                 predictedPowerUpType === PowerUpType.ShorterFuse ? '⏱️' :
+                 predictedPowerUpType === PowerUpType.SpeedBoost ? '🏃' :
+                 predictedPowerUpType === PowerUpType.SplatShield ? '🛡️' :
+                 predictedPowerUpType === PowerUpType.SplashJump ? '🦘' : '❓'}
+              </div>
+            </Html>
           );
         })
       )}
