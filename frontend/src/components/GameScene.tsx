@@ -45,26 +45,34 @@ interface PlayerCharacterProps {
 
 const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
   const meshRef = useRef<Mesh>(null);
-
-  // Refs to store the current visual position
   const groupRef = useRef<Group>(null);
-
-  // Ref to store target rotation
   const targetRotationRef = useRef(0);
-
-  // Movement lerp alpha (adjust for desired smoothness)
   const movementAlpha = 0.15;
-
-  // Rotation lerp alpha (can be different from movement for faster/slower rotation)
   const rotationAlpha = 0.2;
+  const isMovingRef = useRef(false);
 
   // Calculate base bounce and wiggle animations based on game tick
   const bounce = Math.sin(tick * 0.1) * 0.05;
+
+  // Calculate leg positions and animations
+  const legPositions = useMemo(() => {
+    return [
+      { x: -0.3, z: -0.3 }, // Front Left
+      { x: 0.3, z: -0.3 },  // Front Right
+      { x: -0.3, z: 0.3 },  // Back Left
+      { x: 0.3, z: 0.3 },   // Back Right
+    ];
+  }, []);
 
   // Use useFrame to update position with lerp
   useFrame(({ camera }, deltaTime) => {
     const group = groupRef.current;
     if (!group) return;
+
+    // Previous position tracking for movement detection
+    const prevX = group.position.x;
+    const prevZ = group.position.z;
+
     group.position.x = lerpVector(
       group.position.x,
       player.x,
@@ -79,8 +87,10 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
     );
     group.position.y = 0.5 + bounce;
 
+    // Calculate if the character is moving
+    isMovingRef.current = Math.abs(group.position.x - prevX) > 0.001 || Math.abs(group.position.z - prevZ) > 0.001;
+
     // Calculate rotation based on movement direction
-    // Support 8-way rotation including diagonal directions
     type DirectionMap = {
       [key: string]: number;
     };
@@ -90,37 +100,30 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
       'down': Math.PI,
       'left': Math.PI / 2,
       'right': -Math.PI / 2,
-      // Add diagonal directions
       'up-left': Math.PI / 4,
       'up-right': -Math.PI / 4,
       'down-left': 3 * Math.PI / 4,
       'down-right': -3 * Math.PI / 4
     };
 
-    // Use diagonal direction if available, otherwise fall back to regular direction
     const directionKey = player.diagonalDirection || player.lastDirection;
 
     if (directionKey) {
-      // Update the target rotation
       targetRotationRef.current = rotations[directionKey] || 0;
     }
 
-    // Calculate the shortest path for rotation
     let currentRotation = group.rotation.y;
     let targetRotation = targetRotationRef.current;
 
-    // Normalize both rotations to be in the range [-PI, PI]
     while (currentRotation > Math.PI) currentRotation -= Math.PI * 2;
     while (currentRotation < -Math.PI) currentRotation += Math.PI * 2;
     while (targetRotation > Math.PI) targetRotation -= Math.PI * 2;
     while (targetRotation < -Math.PI) targetRotation += Math.PI * 2;
 
-    // Find the shortest rotation direction
     let rotationDiff = targetRotation - currentRotation;
     if (rotationDiff > Math.PI) rotationDiff -= Math.PI * 2;
     if (rotationDiff < -Math.PI) rotationDiff += Math.PI * 2;
 
-    // Apply lerp to the rotation
     group.rotation.y = lerpVector(
       currentRotation,
       currentRotation + rotationDiff,
@@ -128,17 +131,14 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
       deltaTime
     );
 
-    const isMoving = Math.abs(group.position.x - player.x) > 0.01 || Math.abs(group.position.z - player.y) > 0.01;
-    const movementWiggle = isMoving ? Math.sin(tick * 0.2) * 0.05 : 0;
+    const movementWiggle = isMovingRef.current ? Math.sin(tick * 0.2) * 0.05 : 0;
     group.rotation.y += movementWiggle;
   });
 
   return (
-    <group
-      ref={groupRef}
-    >
+    <group ref={groupRef}>
       {/* Main blob body */}
-      <mesh ref={meshRef} castShadow receiveShadow>
+      <mesh ref={meshRef} castShadow receiveShadow position={[0, 0, 0]}>
         <sphereGeometry args={[0.5, 16, 16]} />
         <meshPhysicalMaterial
           color={player.color}
@@ -150,6 +150,42 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
           emissive={new Color(player.color).multiplyScalar(0.2)}
         />
       </mesh>
+
+      {/* Stubby legs */}
+      {legPositions.map((pos, index) => {
+        // Calculate leg animation - only animate when moving
+        const legPhase = isMovingRef.current ? (tick * 0.35 + index * Math.PI / 2) % (Math.PI * 2) : index * Math.PI / 2;
+        const legBounce = isMovingRef.current ? Math.sin(legPhase) * 0.18 : 0;
+        const legSquish = isMovingRef.current ? Math.cos(legPhase) * 0.2 : 0;
+
+        // Add a slight outward angle to the legs
+        const legAngle = Math.atan2(pos.x, pos.z) * 0.3;
+
+        return (
+          <group
+            key={`leg-${index}`}
+            position={[pos.x, -0.3 + legBounce, pos.z]}
+            rotation={[legAngle, 0, 0]}
+          >
+            {/* Foot */}
+            <mesh
+              castShadow
+              position={[0, 0, 0]}
+              scale={[1 + Math.abs(legSquish * 0.6), 1 - Math.abs(legSquish * 0.6), 1 + Math.abs(legSquish * 0.6)]}
+            >
+              <sphereGeometry args={[0.15, 8, 8]} />
+              <meshPhysicalMaterial
+                color={player.color}
+                roughness={0.3}
+                metalness={0.0}
+                clearcoat={1.0}
+                clearcoatRoughness={0.3}
+                reflectivity={0.4}
+              />
+            </mesh>
+          </group>
+        );
+      })}
 
       {/* Eyes */}
       <group position={[0, 0.2, -0.35]} rotation={[0, 0, 0]}>
