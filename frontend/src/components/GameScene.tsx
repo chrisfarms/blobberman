@@ -57,10 +57,8 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
   // Calculate leg positions and animations
   const legPositions = useMemo(() => {
     return [
-      { x: -0.3, z: -0.3 }, // Front Left
-      { x: 0.3, z: -0.3 },  // Front Right
-      { x: -0.3, z: 0.3 },  // Back Left
-      { x: 0.3, z: 0.3 },   // Back Right
+      { x: 0.35, z: 0 },  // Front leg
+      { x: -0.35, z: 0 },   // Back leg
     ];
   }, []);
 
@@ -154,26 +152,30 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
       {/* Stubby legs */}
       {legPositions.map((pos, index) => {
         // Calculate leg animation - only animate when moving
-        const legPhase = isMovingRef.current ? (tick * 0.35 + index * Math.PI / 2) % (Math.PI * 2) : index * Math.PI / 2;
-        const legBounce = isMovingRef.current ? Math.sin(legPhase) * 0.18 : 0;
-        const legSquish = isMovingRef.current ? Math.cos(legPhase) * 0.2 : 0;
+        const legPhase = isMovingRef.current ? (tick * 0.75 + index * Math.PI) % (Math.PI * 2) : index * Math.PI;
+        const legBounce = isMovingRef.current ? Math.sin(legPhase) * 0.2 : 0;
+        const legSquish = isMovingRef.current ? Math.cos(legPhase) * 0.5 : 0;
 
-        // Add a slight outward angle to the legs
-        const legAngle = Math.atan2(pos.x, pos.z) * 0.3;
+        // Calculate leg position based on character rotation
+        const angle = targetRotationRef.current;
+
+        // Apply rotation matrix to original position
+        const offsetX = pos.x ;//* cosAngle - pos.z * sinAngle;
+        const offsetZ = pos.z ;//* sinAngle + pos.z * cosAngle;
 
         return (
           <group
             key={`leg-${index}`}
-            position={[pos.x, -0.3 + legBounce, pos.z]}
-            rotation={[legAngle, 0, 0]}
+            position={[offsetX, -0.3 + legBounce, offsetZ]}
+            rotation={[0, angle, 0]}
           >
             {/* Foot */}
             <mesh
               castShadow
               position={[0, 0, 0]}
-              scale={[1 + Math.abs(legSquish * 0.6), 1 - Math.abs(legSquish * 0.6), 1 + Math.abs(legSquish * 0.6)]}
+              scale={[1 + Math.abs(legSquish * 0.7), 1 - Math.abs(legSquish * 0.7), 1 + Math.abs(legSquish * 0.7)]}
             >
-              <sphereGeometry args={[0.15, 8, 8]} />
+              <sphereGeometry args={[0.22, 8, 8]} />
               <meshPhysicalMaterial
                 color={player.color}
                 roughness={0.3}
