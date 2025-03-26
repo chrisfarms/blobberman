@@ -90,12 +90,12 @@ function App() {
         }}
       >
         <color attach="background" args={['#121212']} />
-        <ambientLight intensity={0.5} color="#b0c4de" />
+        <ambientLight intensity={0.6} color="#b0c4de" />
 
         {/* Main directional light for general illumination */}
         <directionalLight
           position={[20, 30, 20]}
-          intensity={0.8}
+          intensity={0.9}
           color="#ffffff"
           castShadow
           shadow-mapSize-width={2048}
@@ -104,12 +104,13 @@ function App() {
           shadow-camera-right={30}
           shadow-camera-top={30}
           shadow-camera-bottom={-30}
+          shadow-bias={-0.0001}
         />
 
         {/* Secondary light from the opposite direction to reduce harsh shadows */}
         <directionalLight
           position={[-20, 20, -20]}
-          intensity={0.4}
+          intensity={0.5}
           color="#a0e6ff"
           castShadow
           shadow-mapSize-width={1024}
@@ -118,11 +119,12 @@ function App() {
           shadow-camera-right={25}
           shadow-camera-top={25}
           shadow-camera-bottom={-25}
+          shadow-bias={-0.0001}
         />
 
         {/* Add a soft hemisphere light with more contrast */}
         <hemisphereLight
-          args={['#80a0ff', '#403060', 0.6]}
+          args={['#80a0ff', '#403060', 0.7]}
         />
 
         {/* Add a subtle fog effect for depth */}

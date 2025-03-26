@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState, useEffect } from 'react';
-import { GridHelper, Group, Mesh, MeshStandardMaterial, Vector3, MeshPhysicalMaterial, Color, MathUtils, Object3D, InstancedMesh } from 'three';
+import { Group, Mesh, Color, Object3D } from 'three';
 import { GameState, PlayerState, Bomb, Explosion, GridCell } from '@/game/simulation';
 import { PowerUpType } from '@/types/shared';
 import { Html } from '@react-three/drei';
@@ -31,15 +31,13 @@ interface PlayerCharacterProps {
 }
 
 const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
-  const meshRef = useRef<Mesh>(null);
+  const bodyRef = useRef<Mesh>(null);
   const groupRef = useRef<Group>(null);
   const targetRotationRef = useRef(0);
   const movementAlpha = 0.15;
   const rotationAlpha = 0.2;
   const isMovingRef = useRef(false);
 
-  // Calculate base bounce and wiggle animations based on game tick
-  const bounce = Math.sin(tick * 0.1) * 0.05;
 
   // Calculate leg positions and animations
   const legPositions = useMemo(() => {
@@ -70,7 +68,14 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
       movementAlpha,
       deltaTime
     );
-    group.position.y = 0.5 + bounce;
+
+    group.position.y = 0.5;
+
+    // animate the body
+    const body = bodyRef.current;
+    if (!body) return;
+    const bounce = Math.sin(tick * 0.2) * 0.02;
+    body.position.y = bounce;
 
     // Calculate if the character is moving
     isMovingRef.current = Math.abs(group.position.x - prevX) > 0.001 || Math.abs(group.position.z - prevZ) > 0.001;
@@ -123,18 +128,62 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
   return (
     <group ref={groupRef}>
       {/* Main blob body */}
-      <mesh ref={meshRef} castShadow receiveShadow position={[0, 0, 0]}>
-        <sphereGeometry args={[0.5, 16, 16]} />
-        <meshPhysicalMaterial
-          color={player.color}
-          roughness={MATERIAL_PROPERTIES.STANDARD.ROUGHNESS}
-          metalness={MATERIAL_PROPERTIES.STANDARD.METALNESS}
-          clearcoat={MATERIAL_PROPERTIES.CLEAR_COAT.VALUE}
-          clearcoatRoughness={MATERIAL_PROPERTIES.CLEAR_COAT.ROUGHNESS}
-          reflectivity={MATERIAL_PROPERTIES.REFLECTIVITY}
-          emissive={new Color(player.color).multiplyScalar(MATERIAL_PROPERTIES.EMISSIVE_INTENSITY.LOW)}
-        />
-      </mesh>
+      <group ref={bodyRef}>
+        <mesh castShadow receiveShadow position={[0, 0, 0]}>
+            <sphereGeometry args={[0.5, 16, 16]} />
+            <meshPhysicalMaterial
+            color={player.color}
+            roughness={MATERIAL_PROPERTIES.STANDARD.ROUGHNESS}
+            metalness={MATERIAL_PROPERTIES.STANDARD.METALNESS}
+            clearcoat={MATERIAL_PROPERTIES.CLEAR_COAT.VALUE}
+            clearcoatRoughness={MATERIAL_PROPERTIES.CLEAR_COAT.ROUGHNESS}
+            reflectivity={MATERIAL_PROPERTIES.REFLECTIVITY}
+            emissive={new Color(player.color).multiplyScalar(MATERIAL_PROPERTIES.EMISSIVE_INTENSITY.LOW)}
+            />
+        </mesh>
+        {/* Eyes */}
+        <group position={[0, 0.2, -0.35]} rotation={[0, 0, 0]}>
+            {/* Left eye */}
+            <mesh position={[-0.2, 0, 0]}>
+            <sphereGeometry args={[0.12, 8, 8]} />
+            <meshPhysicalMaterial
+                color="white"
+                roughness={0.05}
+                clearcoat={1.0}
+            />
+            </mesh>
+            {/* Left pupil */}
+            <mesh position={[-0.2, 0, -0.08]}>
+            <sphereGeometry args={[0.06, 8, 8]} />
+            <meshPhysicalMaterial
+                color="black"
+                roughness={0.05}
+                clearcoat={1.0}
+            />
+            </mesh>
+
+            {/* Right eye */}
+            <mesh position={[0.2, 0, 0]}>
+            <sphereGeometry args={[0.12, 8, 8]} />
+            <meshPhysicalMaterial
+                color="white"
+                roughness={0.05}
+                clearcoat={1.0}
+            />
+            </mesh>
+            {/* Right pupil */}
+            <mesh position={[0.2, 0, -0.08]}>
+            <sphereGeometry args={[0.06, 8, 8]} />
+            <meshPhysicalMaterial
+                color="black"
+                roughness={0.05}
+                clearcoat={1.0}
+            />
+            </mesh>
+        </group>
+
+
+      </group>
 
       {/* Stubby legs */}
       {legPositions.map((pos, index) => {
@@ -164,7 +213,7 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
               position={[0, 0, 0]}
               scale={[1 + Math.abs(legSquish * 0.7), 1 - Math.abs(legSquish * 0.7), 1 + Math.abs(legSquish * 0.7)]}
             >
-              <sphereGeometry args={[0.22, 8, 8]} />
+              <sphereGeometry args={[0.22, 16, 8]} />
               <meshPhysicalMaterial
                 color={player.color}
           roughness={MATERIAL_PROPERTIES.STANDARD.ROUGHNESS}
@@ -177,47 +226,6 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
           </group>
         );
       })}
-
-      {/* Eyes */}
-      <group position={[0, 0.2, -0.35]} rotation={[0, 0, 0]}>
-        {/* Left eye */}
-        <mesh position={[-0.2, 0, 0]}>
-          <sphereGeometry args={[0.12, 8, 8]} />
-          <meshPhysicalMaterial
-            color="white"
-            roughness={0.05}
-            clearcoat={1.0}
-          />
-        </mesh>
-        {/* Left pupil */}
-        <mesh position={[-0.2, 0, -0.08]}>
-          <sphereGeometry args={[0.06, 8, 8]} />
-          <meshPhysicalMaterial
-            color="black"
-            roughness={0.05}
-            clearcoat={1.0}
-          />
-        </mesh>
-
-        {/* Right eye */}
-        <mesh position={[0.2, 0, 0]}>
-          <sphereGeometry args={[0.12, 8, 8]} />
-          <meshPhysicalMaterial
-            color="white"
-            roughness={0.05}
-            clearcoat={1.0}
-          />
-        </mesh>
-        {/* Right pupil */}
-        <mesh position={[0.2, 0, -0.08]}>
-          <sphereGeometry args={[0.06, 8, 8]} />
-          <meshPhysicalMaterial
-            color="black"
-            roughness={0.05}
-            clearcoat={1.0}
-          />
-        </mesh>
-      </group>
 
       {/* Shield effect when player has the shield power-up */}
       {player.hasShield && (
@@ -538,7 +546,6 @@ interface CellInstance {
 }
 
 const GameScene = ({ gameState }: GameSceneProps) => {
-  const gridRef = useRef<GridHelper>(null);
   const wallInstancesRef = useRef<Object3D>(new Object3D());
   const breakableWallInstancesRef = useRef<Object3D>(new Object3D());
   const floorInstancesRef = useRef<Object3D>(new Object3D());
@@ -706,12 +713,6 @@ const GameScene = ({ gameState }: GameSceneProps) => {
 
   return (
     <>
-      <gridHelper
-        ref={gridRef}
-        args={[gameState.gridSize, gameState.gridSize]}
-        position={[0, 0.01, 0]}
-      />
-
       {/* Render walls using instancing */}
       {wallCells.length > 0 && (
         <InstancedRoundedBox
@@ -794,6 +795,7 @@ const GameScene = ({ gameState }: GameSceneProps) => {
             clearcoat={0.8}
             clearcoatRoughness={0.2}
             reflectivity={0.5}
+            castShadow={false}
             receiveShadow
             color={player.color}
           />
@@ -837,6 +839,7 @@ const GameScene = ({ gameState }: GameSceneProps) => {
             clearcoat={0.8}
             clearcoatRoughness={0.2}
             reflectivity={0.5}
+            castShadow={false}
             receiveShadow
             color={FLOOR_COLOR}
           />
