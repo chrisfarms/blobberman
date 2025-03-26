@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState, useEffect } from 'react';
-import { Group, Mesh, Color, Object3D } from 'three';
+import { Group, Mesh, Color, Object3D, Vector3 } from 'three';
 import { GameState, PlayerState, Bomb, Explosion, GridCell } from '@/game/simulation';
 import { PowerUpType } from '@/types/shared';
 import { Html } from '@react-three/drei';
@@ -8,6 +8,18 @@ import { willSpawnPowerUpAtPosition, getPowerUpTypeAtPosition } from '@/utils/ra
 import { useFrame } from '@react-three/fiber';
 import CustomRoundedBox, { InstancedRoundedBox } from './RoundedBox';
 import { WALL_COLOR, BREAKABLE_WALL_COLOR, FLOOR_COLOR, POWER_UP_COLORS, MATERIAL_PROPERTIES } from '../utils/colors';
+
+let alreadyRedirected = false;
+function redirectToNextJam() {
+  if (alreadyRedirected) return;
+  alreadyRedirected = true;
+  window.location.href = 'https://portal.pieter.com';
+}
+
+// Portal constants
+const PORTAL_POSITION = { x: 20, y: 15 }; // Changed from center to a more visible position
+const PORTAL_COLOR = "#00ff66"; // Bright green color
+const PORTAL_INNER_COLOR = "#88ffaa"; // Lighter green for inner glow
 
 interface GameSceneProps {
   gameState: GameState;
@@ -28,9 +40,10 @@ const lerpVector = (current: number, target: number, alpha: number, deltaTime: n
 interface PlayerCharacterProps {
   player: PlayerState;
   tick: number;
+  gameState: GameState;
 }
 
-const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
+const PlayerCharacter = ({ player, tick, gameState }: PlayerCharacterProps) => {
   const bodyRef = useRef<Mesh>(null);
   const groupRef = useRef<Group>(null);
   const targetRotationRef = useRef(0);
@@ -38,6 +51,10 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
   const rotationAlpha = 0.2;
   const isMovingRef = useRef(false);
   const legAnimationTimeRef = useRef(0);
+
+  // Add portal state tracking
+  const [isFallingInPortal, setIsFallingInPortal] = useState(false);
+  const fallStartTickRef = useRef(0);
 
   // Calculate leg positions and animations
   const legPositions = useMemo(() => {
@@ -59,9 +76,42 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
   }, [legPositions]);
 
   // Use useFrame to update position with lerp
-  useFrame(({ camera }, deltaTime) => {
+  useFrame(({}, deltaTime) => {
     const group = groupRef.current;
     if (!group) return;
+
+    // Calculate world coordinates of the portal
+    const portalWorldX = PORTAL_POSITION.x - gameState.gridSize / 2 + 0.5;
+    const portalWorldY = PORTAL_POSITION.y - gameState.gridSize / 2 + 0.5;
+
+    // Check if player is on the portal cell and portal is enabled
+    const isOnPortalCell = Math.abs(player.x - portalWorldX) < 0.5 &&
+                           Math.abs(player.y - portalWorldY) < 0.5;
+
+    // Handle falling animation
+    if (isOnPortalCell && PORTAL_ENABLED && !isFallingInPortal) {
+      setIsFallingInPortal(true);
+      fallStartTickRef.current = Date.now();
+      group.position.x = portalWorldX;
+      group.position.y = portalWorldY;
+    }
+    if (isFallingInPortal) {
+      const fallDuration = 2000; // ms
+      const fallProgress = (Date.now() - fallStartTickRef.current) / fallDuration;
+
+      if (fallProgress <= 1) {
+        // Scale down and move down
+        const scale = 1 - fallProgress * 0.9;
+        group.scale.set(scale, scale, scale);
+        group.position.y = 0.5 - fallProgress * 3;
+        group.rotation.z += deltaTime * 2;
+
+        // Skip normal positioning logic during portal fall
+        return;
+      } else {
+        redirectToNextJam();
+      }
+    }
 
     // Previous position tracking for movement detection
     const prevX = group.position.x;
@@ -140,6 +190,11 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
     const movementWiggle = isMovingRef.current ? Math.sin(tick * 0.2) * 0.05 : 0;
     group.rotation.y += movementWiggle;
   });
+
+  // If the player is deep in the portal fall animation, don't render them
+  if (isFallingInPortal && (tick - fallStartTickRef.current) > 60) {
+    return null;
+  }
 
   return (
     <group ref={groupRef}>
@@ -551,6 +606,127 @@ interface CellInstance {
   castShadow: boolean;
 }
 
+// Check if portal is enabled via URL parameter
+const PORTAL_ENABLED = ((): boolean => {
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const enabled = params.get('portal') === 'true';
+    return enabled;
+  }
+  return false;
+})();
+
+// Add the Portal component
+interface PortalProps {
+  position: { x: number, y: number };
+  tick: number;
+  gameState: GameState;
+}
+
+const Portal = ({ position, tick, gameState }: PortalProps) => {
+  // Portal animation
+  const rotationSpeed = 0.02;
+  const portalRef = useRef<Group>(null);
+  const innerRingRef = useRef<Mesh>(null);
+
+  // Ensure portal is within grid bounds
+  const gridPosition = {
+    x: Math.min(Math.max(position.x, 0), gameState.gridSize - 1),
+    y: Math.min(Math.max(position.y, 0), gameState.gridSize - 1)
+  };
+
+  // Calculate world position
+  const worldX = gridPosition.x - gameState.gridSize / 2 + 0.5;
+  const worldZ = gridPosition.y - gameState.gridSize / 2 + 0.5;
+
+  // Portal effect - pulsing and rotation
+  useFrame((_, delta) => {
+    if (portalRef.current) {
+      // Rotate the portal
+      //portalRef.current.rotation.y += rotationSpeed;
+
+      // Pulsing effect
+      const pulse = Math.sin(tick * 0.1) * 0.2 + 0.8;
+      if (innerRingRef.current) {
+        innerRingRef.current.scale.set(pulse, 1, pulse);
+      }
+    }
+  });
+
+  return (
+    <group ref={portalRef} position={[worldX, 0.15, worldZ]} rotation={[Math.PI/2, 0, 0]}>
+      {/* Outer ring */}
+      <mesh receiveShadow>
+        <torusGeometry args={[0.4, 0.08, 16, 32]} />
+        <meshPhysicalMaterial
+          color={PORTAL_COLOR}
+          emissive={PORTAL_COLOR}
+          emissiveIntensity={1.0}
+          roughness={0.1}
+          clearcoat={1.0}
+          clearcoatRoughness={0.1}
+          reflectivity={0.8}
+        />
+      </mesh>
+
+      {/* Inner ring with pulse animation */}
+      <mesh ref={innerRingRef} position={[0, -0.01, 0]}>
+        <torusGeometry args={[0.3, 0.04, 16, 32]} />
+        <meshPhysicalMaterial
+          color={PORTAL_INNER_COLOR}
+          emissive={PORTAL_INNER_COLOR}
+          emissiveIntensity={0.6}
+          transparent
+          opacity={0.7}
+          roughness={0.1}
+          clearcoat={1.0}
+        />
+      </mesh>
+
+      {/* Portal center void */}
+      <mesh position={[0, -0.02, 0]}>
+        <circleGeometry args={[0.25, 32]} />
+        <meshPhysicalMaterial
+          color="black"
+          emissive="black"
+          roughness={0}
+          metalness={0}
+          transparent
+          opacity={0.9}
+        />
+      </mesh>
+
+      {/* Swirling particles in the portal */}
+      {Array.from({ length: 8 }).map((_, i) => {
+        const angle = (i / 8) * Math.PI * 2;
+        const radius = 0.15 + Math.sin(tick * 0.05 + i) * 0.05;
+        const x = Math.cos(angle + tick * 0.1) * radius;
+        const z = Math.sin(angle + tick * 0.1) * radius;
+        return (
+          <mesh key={`particle-${i}`} position={[x, -0.01, z]} rotation={[0, tick * 0.1 + i, 0]}>
+            <sphereGeometry args={[0.02, 8, 8]} />
+            <meshPhysicalMaterial
+              color={PORTAL_COLOR}
+              emissive={PORTAL_COLOR}
+              emissiveIntensity={1.5}
+              transparent
+              opacity={0.8}
+            />
+          </mesh>
+        );
+      })}
+
+      {/* Portal glow - make larger for more visibility */}
+      <pointLight
+        color={PORTAL_COLOR}
+        intensity={1.5}
+        distance={3}
+        position={[0, 0.3, 0]}
+      />
+    </group>
+  );
+};
+
 const GameScene = ({ gameState }: GameSceneProps) => {
   const wallInstancesRef = useRef<Object3D>(new Object3D());
   const breakableWallInstancesRef = useRef<Object3D>(new Object3D());
@@ -719,6 +895,15 @@ const GameScene = ({ gameState }: GameSceneProps) => {
 
   return (
     <>
+      {/* vibejam portal */}
+      {PORTAL_ENABLED && (
+        <Portal
+          position={PORTAL_POSITION}
+          tick={gameState.tick}
+          gameState={gameState}
+        />
+      )}
+
       {/* Render walls using instancing */}
       {wallCells.length > 0 && (
         <InstancedRoundedBox
@@ -856,6 +1041,7 @@ const GameScene = ({ gameState }: GameSceneProps) => {
       {/* Render dev mode power-up indicators */}
       {ENV.DEV_MODE && gameState.grid.map((row, y) =>
         row.map((cell, x) => {
+          if (!PORTAL_ENABLED && PORTAL_POSITION.x === x && PORTAL_POSITION.y === y) return null;
           if (cell.content !== 'breakableWall') return null;
 
           const posX = x - gameState.gridSize / 2 + 0.5;
@@ -988,7 +1174,7 @@ const GameScene = ({ gameState }: GameSceneProps) => {
 
       {/* Replace the player rendering with our new PlayerCharacter component */}
       {Array.from(gameState.players.values()).map(player => (
-        <PlayerCharacter key={player.playerId} player={player} tick={gameState.tick} />
+        <PlayerCharacter key={player.playerId} player={player} tick={gameState.tick} gameState={gameState} />
       ))}
 
       {/* Render wall destruction effects */}
