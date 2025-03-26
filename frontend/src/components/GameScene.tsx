@@ -37,7 +37,7 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
   const movementAlpha = 0.15;
   const rotationAlpha = 0.2;
   const isMovingRef = useRef(false);
-
+  const legAnimationTimeRef = useRef(0);
 
   // Calculate leg positions and animations
   const legPositions = useMemo(() => {
@@ -46,6 +46,17 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
       { x: -0.35, z: 0 },   // Back leg
     ];
   }, []);
+
+  // Memoize legs to improve performance
+  const legs = useMemo(() => {
+    return legPositions.map((pos, index) => {
+      return {
+        position: pos,
+        index,
+        phaseOffset: index * Math.PI
+      };
+    });
+  }, [legPositions]);
 
   // Use useFrame to update position with lerp
   useFrame(({ camera }, deltaTime) => {
@@ -79,6 +90,11 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
 
     // Calculate if the character is moving
     isMovingRef.current = Math.abs(group.position.x - prevX) > 0.001 || Math.abs(group.position.z - prevZ) > 0.001;
+
+    // Update leg animation time based on movement
+    if (isMovingRef.current) {
+      legAnimationTimeRef.current += deltaTime * 5; // Speed factor can be adjusted
+    }
 
     // Calculate rotation based on movement direction
     type DirectionMap = {
@@ -129,8 +145,8 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
     <group ref={groupRef}>
       {/* Main blob body */}
       <group ref={bodyRef}>
-        <mesh castShadow receiveShadow position={[0, 0, 0]}>
-            <sphereGeometry args={[0.5, 16, 16]} />
+        <mesh castShadow receiveShadow position={[0, 0, 0]} scale={[1, 1, 1]}>
+            <sphereGeometry args={[0.5, 16, 16]}/>
             <meshPhysicalMaterial
             color={player.color}
             roughness={MATERIAL_PROPERTIES.STANDARD.ROUGHNESS}
@@ -186,24 +202,24 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
       </group>
 
       {/* Stubby legs */}
-      {legPositions.map((pos, index) => {
+      {legs.map((leg) => {
         // Calculate leg animation - only animate when moving
-        const legPhase = isMovingRef.current ? (tick * 0.75 + index * Math.PI) % (Math.PI * 2) : index * Math.PI;
+        const legPhase = isMovingRef.current
+          ? (legAnimationTimeRef.current + leg.phaseOffset) % (Math.PI * 2)
+          : leg.phaseOffset;
         const legBounce = isMovingRef.current ? Math.sin(legPhase) * 0.2 : 0;
         const legSquish = isMovingRef.current ? Math.cos(legPhase) * 0.5 : 0;
 
         // Calculate leg position based on character rotation
         const angle = targetRotationRef.current;
-        const cosAngle = Math.cos(angle);
-        const sinAngle = Math.sin(angle);
 
         // Apply rotation matrix to original position
-        const offsetX = pos.x;
+        const offsetX = leg.position.x;
         const offsetZ = legPhase * 0.05 - 0.2;
 
         return (
           <group
-            key={`leg-${index}`}
+            key={`leg-${leg.index}`}
             position={[offsetX, -0.3 + legBounce, offsetZ]}
             rotation={[0, angle, 0]}
           >
@@ -216,11 +232,11 @@ const PlayerCharacter = ({ player, tick }: PlayerCharacterProps) => {
               <sphereGeometry args={[0.22, 16, 8]} />
               <meshPhysicalMaterial
                 color={player.color}
-          roughness={MATERIAL_PROPERTIES.STANDARD.ROUGHNESS}
-          metalness={MATERIAL_PROPERTIES.STANDARD.METALNESS}
-          clearcoat={MATERIAL_PROPERTIES.CLEAR_COAT.VALUE}
-          clearcoatRoughness={MATERIAL_PROPERTIES.CLEAR_COAT.ROUGHNESS}
-          reflectivity={MATERIAL_PROPERTIES.REFLECTIVITY}
+                roughness={MATERIAL_PROPERTIES.STANDARD.ROUGHNESS}
+                metalness={MATERIAL_PROPERTIES.STANDARD.METALNESS}
+                clearcoat={MATERIAL_PROPERTIES.CLEAR_COAT.VALUE}
+                clearcoatRoughness={MATERIAL_PROPERTIES.CLEAR_COAT.ROUGHNESS}
+                reflectivity={MATERIAL_PROPERTIES.REFLECTIVITY}
               />
             </mesh>
           </group>
@@ -299,7 +315,7 @@ const PaintBomb = ({ bomb, tick, playerColor }: PaintBombProps) => {
   // Calculate bomb size pulsation based on fuse timer
   const bombProgress = Math.min(1, (tick - bomb.placedAt) / (60 * bomb.fuseMultiplier));
   const pulsate = Math.sin(bombProgress * Math.PI * 10) * 0.1;
-  const scale = 0.3 + pulsate;
+  const scale = (0.3 + bombProgress * 0.7) + pulsate * (bombProgress * 2);
   const intensity = 0.3 + bombProgress * 0.7; // Increase glow as bomb nears explosion
 
   return (
@@ -316,16 +332,6 @@ const PaintBomb = ({ bomb, tick, playerColor }: PaintBombProps) => {
           clearcoatRoughness={0.2}
           reflectivity={0.5}
         />
-      </mesh>
-
-      {/* Timer visualization */}
-      <mesh position={[0, 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.2, 0.25, 32]} />
-        <meshPhysicalMaterial color="white" transparent opacity={0.8} clearcoat={0.5} />
-      </mesh>
-      <mesh position={[0, 0.51, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.2, 0.25, 32, 1, 0, bombProgress * Math.PI * 2]} />
-        <meshPhysicalMaterial color="red" emissive="red" emissiveIntensity={0.5} clearcoat={1.0} />
       </mesh>
     </group>
   );
@@ -790,11 +796,12 @@ const GameScene = ({ gameState }: GameSceneProps) => {
             depth={1}
             radius={0.05}
             segments={2}
-            roughness={0.2}
-            metalness={0.1}
-            clearcoat={0.8}
-            clearcoatRoughness={0.2}
-            reflectivity={0.5}
+            roughness={MATERIAL_PROPERTIES.STANDARD.ROUGHNESS}
+            metalness={MATERIAL_PROPERTIES.STANDARD.METALNESS}
+            clearcoat={MATERIAL_PROPERTIES.CLEAR_COAT.VALUE}
+            clearcoatRoughness={MATERIAL_PROPERTIES.CLEAR_COAT.ROUGHNESS}
+            reflectivity={MATERIAL_PROPERTIES.REFLECTIVITY}
+            emissive={new Color(player.color).multiplyScalar(MATERIAL_PROPERTIES.EMISSIVE_INTENSITY.LOW)}
             castShadow={false}
             receiveShadow
             color={player.color}

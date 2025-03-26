@@ -199,6 +199,7 @@ interface InstancedRoundedBoxProps {
   castShadow?: boolean;
   receiveShadow?: boolean;
   updateMatrices?: (mesh: InstancedMesh) => void;
+  emissive?: Color,
 }
 
 export const InstancedRoundedBox: React.FC<InstancedRoundedBoxProps> = ({
@@ -206,6 +207,7 @@ export const InstancedRoundedBox: React.FC<InstancedRoundedBoxProps> = ({
   positions,
   scales,
   colors,
+  emissive,
   color = 'white',
   width = 1,
   height = 1,
@@ -239,7 +241,8 @@ export const InstancedRoundedBox: React.FC<InstancedRoundedBoxProps> = ({
         metalness,
         clearcoat,
         clearcoatRoughness,
-        reflectivity
+        reflectivity,
+        emissive,
       });
     } else {
       return new MeshPhysicalMaterial({
@@ -248,7 +251,8 @@ export const InstancedRoundedBox: React.FC<InstancedRoundedBoxProps> = ({
         metalness,
         clearcoat,
         clearcoatRoughness,
-        reflectivity
+        reflectivity,
+        emissive,
       });
     }
   }, [roughness, metalness, clearcoat, clearcoatRoughness, reflectivity, colors, color]);
